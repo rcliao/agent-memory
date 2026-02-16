@@ -52,3 +52,23 @@ func (s *SQLiteStore) Stats(ctx context.Context, dbPath string) (*Stats, error) 
 
 	return st, nil
 }
+
+// ListNamespaces returns all namespaces with counts.
+func (s *SQLiteStore) ListNamespaces(ctx context.Context) ([]NamespaceStats, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ns, COUNT(*) as cnt, COUNT(DISTINCT key) as keys
+		FROM memories WHERE deleted_at IS NULL
+		GROUP BY ns ORDER BY cnt DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []NamespaceStats
+	for rows.Next() {
+		var ns NamespaceStats
+		rows.Scan(&ns.NS, &ns.Count, &ns.Keys)
+		result = append(result, ns)
+	}
+	return result, nil
+}

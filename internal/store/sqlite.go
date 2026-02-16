@@ -90,6 +90,15 @@ func (s *SQLiteStore) migrate() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_chunks_memory ON chunks(memory_id);
 	CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at);
+
+	CREATE TABLE IF NOT EXISTS memory_links (
+		from_id    TEXT NOT NULL REFERENCES memories(id),
+		to_id      TEXT NOT NULL REFERENCES memories(id),
+		rel        TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		PRIMARY KEY (from_id, to_id, rel)
+	);
+	CREATE INDEX IF NOT EXISTS idx_links_to ON memory_links(to_id);
 	`
 	_, err := s.db.Exec(schema)
 	if err != nil {
