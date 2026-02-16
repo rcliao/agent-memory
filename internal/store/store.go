@@ -16,6 +16,7 @@ type PutParams struct {
 	Tags     []string
 	Priority string
 	Meta     string
+	TTL      string // e.g. "7d", "24h", "30m"
 }
 
 // GetParams holds parameters for retrieving a memory.

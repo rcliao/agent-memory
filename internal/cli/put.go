@@ -25,6 +25,7 @@ func init() {
 	cmd.Flags().StringP("tags", "t", "", "Comma-separated tags")
 	cmd.Flags().StringP("priority", "p", "normal", "Priority: low, normal, high, critical")
 	cmd.Flags().String("meta", "", "JSON metadata")
+	cmd.Flags().String("ttl", "", "Time-to-live (e.g. 7d, 24h, 30m)")
 
 	cmd.MarkFlagRequired("ns")
 	cmd.MarkFlagRequired("key")
@@ -39,6 +40,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	tagsStr, _ := cmd.Flags().GetString("tags")
 	priority, _ := cmd.Flags().GetString("priority")
 	meta, _ := cmd.Flags().GetString("meta")
+	ttl, _ := cmd.Flags().GetString("ttl")
 
 	// Get content: positional arg first, then check stdin
 	var content string
@@ -83,6 +85,7 @@ func runPut(cmd *cobra.Command, args []string) {
 		Tags:     tags,
 		Priority: priority,
 		Meta:     meta,
+		TTL:      ttl,
 	})
 	if err != nil {
 		exitErr("put", err)

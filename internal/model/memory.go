@@ -19,6 +19,7 @@ type Memory struct {
 	AccessCount    int        `json:"access_count"`
 	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
 	Meta           string     `json:"meta,omitempty"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	ChunkCount     int        `json:"chunks,omitempty"`
 }
 

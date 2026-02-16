@@ -19,6 +19,9 @@ agent-memory put -n "user:prefs" -k "editor" "Prefers Neovim with Lazy plugin ma
 # Store with priority
 agent-memory put -n "user:prefs" -k "allergies" -p critical "Allergic to peanuts"
 
+# Store with TTL (auto-expires)
+agent-memory put -n "session" -k "token" --ttl 24h "abc123"
+
 # Pipe content from stdin
 cat session-notes.md | agent-memory put -n "project:myapp" -k "session-2026-02-16" --kind episodic
 
@@ -40,12 +43,38 @@ agent-memory list -n "project:myapp" --kind episodic --tags "deploy,infra"
 # List keys only
 agent-memory list -n "project:myapp" --keys-only
 
+# Search memories
+agent-memory search -n "user:prefs" "neovim"
+agent-memory search "deploy"
+
+# Database stats
+agent-memory stats
+
+# Export memories
+agent-memory export -n "user:prefs" > backup.json
+
+# Import memories
+agent-memory import < backup.json
+
 # Soft-delete (recoverable)
 agent-memory rm -n "user:prefs" -k "old-thing"
 
 # Hard-delete all versions (permanent)
 agent-memory rm -n "user:prefs" -k "old-thing" --all-versions --hard
 ```
+
+## Commands
+
+| Command  | Description |
+|----------|-------------|
+| `put`    | Store a memory (positional arg or stdin) |
+| `get`    | Retrieve a memory by namespace and key |
+| `list`   | List memories with filters |
+| `search` | Search memory content by keyword/substring |
+| `rm`     | Soft-delete or hard-delete a memory |
+| `stats`  | Show database statistics |
+| `export` | Export memories as JSON |
+| `import` | Import memories from JSON (stdin) |
 
 ## Storage
 
@@ -73,9 +102,20 @@ agent-memory get -n "ns" -k "config"           # returns v2
 agent-memory get -n "ns" -k "config" --history  # returns [v2, v1]
 ```
 
+## TTL / Expiry
+
+Memories can have a time-to-live. Expired memories are automatically filtered from `list`, `get`, and `search` results:
+
+```bash
+agent-memory put -n "session" -k "cache" --ttl 7d "temporary data"
+agent-memory put -n "session" -k "token" --ttl 24h "short-lived"
+```
+
+Supported formats: `7d` (days), `24h` (hours), `30m` (minutes), `60s` (seconds).
+
 ## Chunking
 
-Long content is automatically split into chunks for future search indexing. Chunks are internal — you always get back full memory content.
+Long content is automatically split into chunks for search indexing. Chunks are internal — you always get back full memory content. Search queries match across chunks too.
 
 ## Dependencies
 

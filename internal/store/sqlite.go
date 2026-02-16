@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,7 +71,8 @@ func (s *SQLiteStore) migrate() error {
 		priority    TEXT NOT NULL DEFAULT 'normal',
 		access_count INTEGER NOT NULL DEFAULT 0,
 		last_accessed_at TEXT,
-		meta        TEXT
+		meta        TEXT,
+		expires_at  TEXT
 	);
 	CREATE INDEX IF NOT EXISTS idx_memories_ns_key ON memories(ns, key);
 	CREATE INDEX IF NOT EXISTS idx_memories_ns_kind ON memories(ns, kind);
@@ -86,9 +89,16 @@ func (s *SQLiteStore) migrate() error {
 		end_line    INTEGER
 	);
 	CREATE INDEX IF NOT EXISTS idx_chunks_memory ON chunks(memory_id);
+	CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at);
 	`
 	_, err := s.db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add expires_at column if missing (upgrade from older schema)
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN expires_at TEXT`)
+	return nil
 }
 
 func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, error) {
@@ -116,6 +126,16 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		metaPtr = &p.Meta
 	}
 
+	var expiresAt *string
+	if p.TTL != "" {
+		d, err := parseTTL(p.TTL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid ttl: %w", err)
+		}
+		exp := now.Add(d).Format(time.RFC3339)
+		expiresAt = &exp
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -138,10 +158,10 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 	}
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO memories (id, ns, key, content, kind, tags, version, supersedes, created_at, priority, access_count, meta)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+		`INSERT INTO memories (id, ns, key, content, kind, tags, version, supersedes, created_at, priority, access_count, meta, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
 		id, p.NS, p.Key, p.Content, kind, tagsJSON, version, supersedes,
-		now.Format(time.RFC3339), priority, metaPtr)
+		now.Format(time.RFC3339), priority, metaPtr, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert memory: %w", err)
 	}
@@ -176,6 +196,10 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		Meta:       p.Meta,
 		ChunkCount: len(chunks),
 	}
+	if expiresAt != nil {
+		t, _ := time.Parse(time.RFC3339, *expiresAt)
+		mem.ExpiresAt = &t
+	}
 	if supersedes != nil {
 		mem.Supersedes = *supersedes
 	}
@@ -189,19 +213,19 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 
 	if p.History {
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
-				        created_at, deleted_at, priority, access_count, last_accessed_at, meta
+				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at
 				 FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
 				 ORDER BY version DESC`
 		args = []interface{}{p.NS, p.Key}
 	} else if p.Version > 0 {
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
-				        created_at, deleted_at, priority, access_count, last_accessed_at, meta
+				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at
 				 FROM memories WHERE ns = ? AND key = ? AND version = ? AND deleted_at IS NULL
 				 LIMIT 1`
 		args = []interface{}{p.NS, p.Key, p.Version}
 	} else {
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
-				        created_at, deleted_at, priority, access_count, last_accessed_at, meta
+				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at
 				 FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
 				 ORDER BY version DESC LIMIT 1`
 		args = []interface{}{p.NS, p.Key}
@@ -244,8 +268,9 @@ func (s *SQLiteStore) List(ctx context.Context, p ListParams) ([]model.Memory, e
 	}
 
 	// Build a query that returns only the latest version of each ns+key
-	where := []string{"m.deleted_at IS NULL"}
-	args := []interface{}{}
+	now := time.Now().UTC().Format(time.RFC3339)
+	where := []string{"m.deleted_at IS NULL", "(m.expires_at IS NULL OR m.expires_at > ?)"}
+	args := []interface{}{now}
 
 	if p.NS != "" {
 		where = append(where, "m.ns = ?")
@@ -264,7 +289,7 @@ func (s *SQLiteStore) List(ctx context.Context, p ListParams) ([]model.Memory, e
 
 	query := fmt.Sprintf(`
 		SELECT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
-		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta
+		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at
 		FROM memories m
 		INNER JOIN (
 			SELECT ns, key, MAX(version) AS max_ver
@@ -350,13 +375,13 @@ type scanner interface {
 
 func scanMemory(row scanner) (model.Memory, error) {
 	var m model.Memory
-	var tagsJSON, supersedes, deletedAt, lastAccessed, meta sql.NullString
+	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt sql.NullString
 	var createdAt string
 
 	err := row.Scan(
 		&m.ID, &m.NS, &m.Key, &m.Content, &m.Kind, &tagsJSON,
 		&m.Version, &supersedes, &createdAt, &deletedAt,
-		&m.Priority, &m.AccessCount, &lastAccessed, &meta,
+		&m.Priority, &m.AccessCount, &lastAccessed, &meta, &expiresAt,
 	)
 	if err != nil {
 		return m, err
@@ -380,6 +405,32 @@ func scanMemory(row scanner) (model.Memory, error) {
 	if tagsJSON.Valid {
 		json.Unmarshal([]byte(tagsJSON.String), &m.Tags)
 	}
+	if expiresAt.Valid {
+		t, _ := time.Parse(time.RFC3339, expiresAt.String)
+		m.ExpiresAt = &t
+	}
 
 	return m, nil
+}
+
+// parseTTL parses a TTL string like "7d", "24h", "30m" into a time.Duration.
+var ttlRegex = regexp.MustCompile(`^(\d+)([dhms])$`)
+
+func parseTTL(s string) (time.Duration, error) {
+	m := ttlRegex.FindStringSubmatch(s)
+	if m == nil {
+		return 0, fmt.Errorf("invalid format %q (use e.g. 7d, 24h, 30m, 60s)", s)
+	}
+	n, _ := strconv.Atoi(m[1])
+	switch m[2] {
+	case "d":
+		return time.Duration(n) * 24 * time.Hour, nil
+	case "h":
+		return time.Duration(n) * time.Hour, nil
+	case "m":
+		return time.Duration(n) * time.Minute, nil
+	case "s":
+		return time.Duration(n) * time.Second, nil
+	}
+	return 0, fmt.Errorf("unknown unit %q", m[2])
 }
