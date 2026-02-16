@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rcliao/agent-memory/internal/model"
 )
@@ -31,8 +32,9 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 
 	query := "%" + p.Query + "%"
 
-	where := []string{"m.deleted_at IS NULL"}
-	args := []interface{}{}
+	now := time.Now().UTC().Format(time.RFC3339)
+	where := []string{"m.deleted_at IS NULL", "(m.expires_at IS NULL OR m.expires_at > ?)"}
+	args := []interface{}{now}
 
 	if p.NS != "" {
 		where = append(where, "m.ns = ?")

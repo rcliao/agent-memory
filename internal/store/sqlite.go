@@ -220,7 +220,10 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 	var query string
 	var args []interface{}
 
+	now := time.Now().UTC().Format(time.RFC3339)
+
 	if p.History {
+		// History shows all versions including expired (for audit)
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
 				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at
 				 FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
@@ -230,14 +233,16 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
 				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at
 				 FROM memories WHERE ns = ? AND key = ? AND version = ? AND deleted_at IS NULL
+				   AND (expires_at IS NULL OR expires_at > ?)
 				 LIMIT 1`
-		args = []interface{}{p.NS, p.Key, p.Version}
+		args = []interface{}{p.NS, p.Key, p.Version, now}
 	} else {
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
 				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at
 				 FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
+				   AND (expires_at IS NULL OR expires_at > ?)
 				 ORDER BY version DESC LIMIT 1`
-		args = []interface{}{p.NS, p.Key}
+		args = []interface{}{p.NS, p.Key, now}
 	}
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
