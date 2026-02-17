@@ -1,14 +1,14 @@
-# Quality Report — 2026-02-17
+# Quality Report — 2025-02-17
 
 ## Test Results
-- Unit tests: all passed / 0 failed (chunker, embedding, store)
+- Unit tests: All passed (3 packages), 0 failed
 - Acceptance tests: 39 passed / 0 failed
 
 ## Fixed This Run
-- (nothing — all clean)
+- Nothing — all clean
 
 ## Issues for Dev
-- (none)
+- None
 
 ## Notes
-- All cached, no changes since last run
+- All cached; no code changes since last run
