@@ -17,13 +17,15 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/rcliao/agent-memory/internal/chunker"
+	"github.com/rcliao/agent-memory/internal/embedding"
 	"github.com/rcliao/agent-memory/internal/model"
 )
 
 // SQLiteStore implements Store using SQLite.
 type SQLiteStore struct {
-	db      *sql.DB
-	entropy *rand.Rand
+	db       *sql.DB
+	entropy  *rand.Rand
+	embedder embedding.Embedder
 }
 
 // NewSQLiteStore opens or creates a SQLite database at the given path.
@@ -39,8 +41,9 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	}
 
 	s := &SQLiteStore{
-		db:      db,
-		entropy: rand.New(rand.NewSource(time.Now().UnixNano())),
+		db:       db,
+		entropy:  rand.New(rand.NewSource(time.Now().UnixNano())),
+		embedder: embedding.NewFromEnv(),
 	}
 
 	if err := s.migrate(); err != nil {
@@ -86,7 +89,8 @@ func (s *SQLiteStore) migrate() error {
 		seq         INTEGER NOT NULL,
 		text        TEXT NOT NULL,
 		start_line  INTEGER,
-		end_line    INTEGER
+		end_line    INTEGER,
+		embedding   TEXT
 	);
 	CREATE INDEX IF NOT EXISTS idx_chunks_memory ON chunks(memory_id);
 	CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at);
@@ -111,8 +115,9 @@ func (s *SQLiteStore) migrate() error {
 		return err
 	}
 
-	// Add expires_at column if missing (upgrade from older schema)
+	// Schema upgrades for older databases
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN expires_at TEXT`)
+	s.db.Exec(`ALTER TABLE chunks ADD COLUMN embedding TEXT`)
 
 	// FTS5 triggers for automatic sync
 	s.db.Exec(`CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
@@ -201,10 +206,23 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 	chunks := chunker.Chunk(p.Content, chunker.DefaultOptions())
 	for i, c := range chunks {
 		chunkID := s.newID()
+
+		// Generate embedding if provider is configured
+		var embeddingJSON *string
+		if s.embedder != nil {
+			vec, err := s.embedder.Embed(ctx, c.Text)
+			if err == nil && len(vec) > 0 {
+				b, _ := json.Marshal(vec)
+				str := string(b)
+				embeddingJSON = &str
+			}
+			// Silently skip embedding errors — FTS5 still works
+		}
+
 		_, err = tx.ExecContext(ctx,
-			`INSERT INTO chunks (id, memory_id, seq, text, start_line, end_line)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
-			chunkID, id, i, c.Text, c.StartLine, c.EndLine)
+			`INSERT INTO chunks (id, memory_id, seq, text, start_line, end_line, embedding)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			chunkID, id, i, c.Text, c.StartLine, c.EndLine, embeddingJSON)
 		if err != nil {
 			return nil, fmt.Errorf("insert chunk: %w", err)
 		}
