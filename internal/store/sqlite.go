@@ -99,6 +99,12 @@ func (s *SQLiteStore) migrate() error {
 		PRIMARY KEY (from_id, to_id, rel)
 	);
 	CREATE INDEX IF NOT EXISTS idx_links_to ON memory_links(to_id);
+
+	CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+		text,
+		content=chunks,
+		content_rowid=rowid
+	);
 	`
 	_, err := s.db.Exec(schema)
 	if err != nil {
@@ -107,6 +113,22 @@ func (s *SQLiteStore) migrate() error {
 
 	// Add expires_at column if missing (upgrade from older schema)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN expires_at TEXT`)
+
+	// FTS5 triggers for automatic sync
+	s.db.Exec(`CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+		INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+	END`)
+	s.db.Exec(`CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+		INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+	END`)
+	s.db.Exec(`CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
+		INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+		INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+	END`)
+
+	// Backfill FTS for any existing chunks not yet indexed
+	s.db.Exec(`INSERT OR IGNORE INTO chunks_fts(rowid, text) SELECT rowid, text FROM chunks`)
+
 	return nil
 }
 
