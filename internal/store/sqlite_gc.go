@@ -145,6 +145,26 @@ func (s *SQLiteStore) GC(ctx context.Context) (GCResult, error) {
 		return result, fmt.Errorf("delete expired edges: %w", err)
 	}
 
+	// Delete links referencing expired memories (FK would otherwise block the memory delete)
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM memory_links WHERE from_id IN (
+			SELECT id FROM memories WHERE expires_at IS NOT NULL AND expires_at < ?
+		) OR to_id IN (
+			SELECT id FROM memories WHERE expires_at IS NOT NULL AND expires_at < ?
+		)`, now, now)
+	if err != nil {
+		return result, fmt.Errorf("delete expired links: %w", err)
+	}
+
+	// Delete file refs belonging to expired memories (FK would otherwise block the memory delete)
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM memory_files WHERE memory_id IN (
+			SELECT id FROM memories WHERE expires_at IS NOT NULL AND expires_at < ?
+		)`, now)
+	if err != nil {
+		return result, fmt.Errorf("delete expired file refs: %w", err)
+	}
+
 	// Delete chunks belonging to expired memories
 	_, err = tx.ExecContext(ctx,
 		`DELETE FROM chunks WHERE memory_id IN (

@@ -54,8 +54,11 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
-	// Auto-GC: silently delete expired memories on startup
-	s.GC(context.Background())
+	// Auto-GC: delete expired memories on startup. Failures must be visible —
+	// a swallowed FK error here once left months of expired memories in place.
+	if _, err := s.GC(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "ghost: startup GC failed: %v\n", err)
+	}
 
 	return s, nil
 }

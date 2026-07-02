@@ -370,6 +370,71 @@ func TestGC(t *testing.T) {
 	}
 }
 
+func TestGCExpiredMemoryWithLinksAndFiles(t *testing.T) {
+	// Regression: expired memories referenced by memory_links or memory_files
+	// rows made the whole GC transaction roll back on the FK constraint,
+	// silently leaving expired memories in place forever.
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	mem, err := s.Put(ctx, PutParams{NS: "ns", Key: "ephemeral", Content: "temp", TTL: "1s"})
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	keep, err := s.Put(ctx, PutParams{NS: "ns", Key: "permanent", Content: "keep"})
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE memories SET expires_at = '2000-01-01T00:00:00Z' WHERE id = ?`, mem.ID)
+	if err != nil {
+		t.Fatalf("update expires_at: %v", err)
+	}
+
+	// Link the expired memory in both directions plus a file ref
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO memory_links (from_id, to_id, rel, created_at) VALUES (?, ?, 'merged_into', '2000-01-01T00:00:00Z')`, []any{mem.ID, keep.ID}},
+		{`INSERT INTO memory_links (from_id, to_id, rel, created_at) VALUES (?, ?, 'relates_to', '2000-01-01T00:00:00Z')`, []any{keep.ID, mem.ID}},
+		{`INSERT INTO memory_files (memory_id, path, rel, created_at) VALUES (?, '/tmp/x.md', 'modified', '2000-01-01T00:00:00Z')`, []any{mem.ID}},
+	} {
+		if _, err := s.db.ExecContext(ctx, q.sql, q.args...); err != nil {
+			t.Fatalf("seed reference row: %v", err)
+		}
+	}
+
+	result, err := s.GC(ctx)
+	if err != nil {
+		t.Fatalf("gc with linked expired memory: %v", err)
+	}
+	if result.MemoriesDeleted != 1 {
+		t.Errorf("expected 1 deleted, got %d", result.MemoriesDeleted)
+	}
+
+	var memCount, linkCount, fileCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM memories WHERE id = ?`, mem.ID).Scan(&memCount); err != nil {
+		t.Fatalf("count memories: %v", err)
+	}
+	if memCount != 0 {
+		t.Errorf("expected expired memory hard-deleted, still present")
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM memory_links WHERE from_id = ? OR to_id = ?`, mem.ID, mem.ID).Scan(&linkCount); err != nil {
+		t.Fatalf("count links: %v", err)
+	}
+	if linkCount != 0 {
+		t.Errorf("expected 0 links referencing deleted memory, got %d", linkCount)
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM memory_files WHERE memory_id = ?`, mem.ID).Scan(&fileCount); err != nil {
+		t.Fatalf("count files: %v", err)
+	}
+	if fileCount != 0 {
+		t.Errorf("expected 0 file refs for deleted memory, got %d", fileCount)
+	}
+}
+
 func TestGCDryRun(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
