@@ -319,6 +319,7 @@ The public `Store` interface is a subset of the internal one — core CRUD, sear
 |---------|-------------|
 | `put` | Store or update a memory |
 | `capture` | Extract + store memories from raw text using deterministic heuristics (no LLM). Also ingests LLM-produced candidates via `--json` |
+| `mine-procedures` | Induce recurring workflows from usage sequences (stdin) into procedural memories by frequency (no LLM) |
 | `get` | Retrieve by namespace + key |
 | `list` | List memories (filterable by ns, kind, tags) |
 | `rm` | Soft-delete (or hard-delete) |

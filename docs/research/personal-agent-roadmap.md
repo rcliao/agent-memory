@@ -110,7 +110,11 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
   contradicts/supersedes edges on Put when near-topic + changed-value or negation
   cues; penalize FROM-side-of-contradicts and older same-topic memories in scoring.
   Optional bi-temporal `valid_from/valid_to` (needs schema ALTER). Depends on C2 + P0.
-- **C5. Procedural workflow induction (mechanical AWM)** — L, transformative. Offline
+- **C5. Procedural workflow induction (mechanical AWM)** — ✅ **Shipped (2026-07-11).**
+  `internal/procedure` (frequent contiguous-sequence miner with maximal-pattern filtering)
+  + `ghost mine-procedures` CLI: reads usage sessions from stdin, stores high-support routines
+  as procedural memories with support-scaled importance. Pure counting, no LLM. Remaining:
+  auto-feed from transcripts/episodic memories (currently caller-supplied sequences). Offline
   `ghost mine-procedures`: frequent-sequence/n-gram mining over command/tool-call
   sequences → procedural memories with frequency-scaled importance. Depends on C1 + P0.
 - **C6. Near-dup content guard on Put** — S/M, med. Cosine-compare new content vs
