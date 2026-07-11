@@ -1,0 +1,145 @@
+# Ghost as an LLM-Free Personal-Agent Memory Tool — Roadmap
+
+> Status: Proposal (2026-07-10). Derived from a 5-angle research pass (write path,
+> read path, shell production usage, SOTA survey, live-DB health) + synthesis.
+> All findings are grounded in code (`file:line`) and read-only queries against the
+> live 285MB `~/.ghost/memory.db`.
+
+## Thesis
+
+Ghost already has **SOTA-competitive, fully LLM-free retrieval** (LongMemEval_S
+R@5 0.908 / MRR 0.827; beats published BM25/Contriever) and a cognitively-grounded
+substrate (kind-aware scoring, typed weighted edges, Atkinson–Shiffrin tiers,
+pure-Go entity/TF-IDF extractors). "Best LLM-free **personal-agent** memory" is
+won on three axes that the public benchmarks never measure:
+
+1. **A capture/learning loop that is actually LLM-free.** Today automatic capture
+   is 100% `claude -p` in `hooks/ghost-stop.sh:100` — it cannot run without an API
+   key, which directly contradicts the differentiator.
+2. **Personalization-aware ranking** that surfaces what proved useful to *this*
+   user and suppresses stale/contradicted facts. Today `utility_count` is captured
+   but never scored, same-day facts are structurally buried, and the associative
+   graph is inert.
+3. **Lifecycle & forgetting that reclaims space** and keeps durable preferences hot.
+
+Most of the work is **wiring dormant primitives into the hot path**, not new
+invention. The retrieval hot path must stay LLM-free; LLM extraction may remain an
+optional out-of-band quality tier.
+
+## Headline evidence
+
+| Finding | Evidence |
+|---|---|
+| Auto-capture requires an LLM | `hooks/ghost-stop.sh:100` pipes transcript to `claude -p`; no heuristic `capture` in CLI or library |
+| `utility_count` scored nowhere | `computeContextScore` (context.go:526) ignores it; 35% of live memories carry a non-zero value |
+| Same-day facts buried | today's episodic ≈ `0.595 × 0.1 (sensory) × 2.5 = 0.149` vs a 60-day ltm summary `0.475`; maps to real `inject_irrelevant` recall misses |
+| Edge graph inert | **205 edges over 6,345 memories**; 97% isolated islands; zero contradicts/depends_on/refines |
+| Superseded bloat | ~38% of live pikamini store is superseded-but-live dead rows (one key has **50 near-identical live copies**); GC never prunes them |
+| Procedural memory thin | only 6.7% (297/4404); behavioral-tagged capture path is dead (0 rows) |
+| Importance flat | 78% of live memories sit at exactly 0.5; importance is caller-declared, never self-assigned |
+| No personal-agent eval | every harness (LongMemEval/LoCoMo/HaluMem) tests public conversational QA, not preference/procedural/decision/freshness recall |
+
+## Strategic themes
+
+1. **LLM-free capture & learning loop** (the write side) — the differentiator.
+2. **Personalization-aware ranking** — make captured-but-dead signals load-bearing.
+3. **Associative graph activation** — densify edges so spreading activation fires.
+4. **Lifecycle & storage health** — utility-driven forgetting that reclaims space.
+5. **Measurement for personalization** — a personal-agent eval, or we tune blind.
+
+## Roadmap (prioritized)
+
+Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free** unless noted.
+
+### Tier 0 — Foundation (do first; gates the tuning work)
+
+- **P0. Personal-agent eval harness** — L, transformative. `TestEvalPersonal*` over a
+  live-DB-shaped synthetic corpus, scored LLM-free by key/tag match, in the existing
+  JSON report (no new tables). Slices: same-day-fact-recall, preference-recall,
+  procedural-recall, decision-recall, freshness-suppression, contradiction-surfacing.
+  Touches: `internal/store/eval_personal.go` (new), `eval_test.go`, `docs/eval.md`.
+
+### Tier 1 — Quick wins (S, high value, no approvals needed)
+
+- **Q1. Same-day recall scoring fix** — S, high. Apply `SessionScope` boost as a floor
+  or *before* the tier multiplier (not a multiply on a 0.1 base) so a today's fact
+  outranks a 60-day summary. Add a regression test. `internal/store/context.go`.
+- **Q2. Utility into ranking** — S, high. Blend bounded `utility_ratio =
+  utility/max(1,access)` into `computeContextScore` + the search re-sort, behind an
+  env weight knob for A/B. Tighten the co-retrieval increment (edge.go:493) from
+  +1-for-all to token-overlap-gated. `context.go`, `search.go`, `edge.go`.
+- **Q3. Storage compaction** — S, high. `ghost gc --prune-superseded` +
+  `--purge-deleted <age>` + `VACUUM`. Reclaims ~1,656 rows / 1,667 chunks on the live
+  DB. Dry-run first, opt-in. Retrieval already joins `MAX(version)` so answers are
+  unaffected. `internal/store/sqlite_gc.go`, `internal/cli/gc.go`.
+- **Q4. Dedup threshold reconcile + `date:` tag on write** — S, med. Fix 0.82-in-code
+  vs 0.92-in-help mismatch, expose `GHOST_DEDUP_THRESHOLD`; auto-stamp
+  `date:YYYY-MM-DD` at write to activate the dead `SessionScope` tag half.
+
+### Tier 2 — Core mechanisms (M/L)
+
+- **C1. LLM-free capture path** — ✅ **Shipped (2026-07-10).** `internal/capture` + `ghost
+  capture` (two-tier: heuristic default, `--json` LLM tier) + `hooks/ghost-stop-heuristic.sh`.
+  New `internal/capture` package:
+  `entity.Extract` + `ExtractTopics` for salience, regex intent classifiers
+  (preference/correction/decision/gotcha/imperative) ported from shell's
+  `write_verify.go`/`recall_verify.go`, Mem0-style ADD/UPDATE/NOOP via embedding-dedup,
+  kind inference, mechanical importance = novelty + cue-weight + emphasis. `ghost
+  capture` CLI + `ghost-stop-heuristic.sh` hook. Keep `claude -p` as optional tier.
+- **C2. Densify the edge graph** — M, high. Promote the entity+topic multi-signal
+  linker (dormant in `BenchBuildEdges`, sqlite_crud.go:565) into hot-path
+  `autoLinkEdges`; widen candidate window beyond `LIMIT 50`; add `ghost relink`
+  (or `reflect --relink`) to backfill. `internal/store/edge.go`.
+- **C3. Write-time salience heuristic** — M, high. Mechanical importance scorer in
+  Put/capture; promote logging-pattern turns to stm/0.55–0.7, keep chatter at
+  sensory/0.3. Expose `PutParams.Salience`. Depends on C1 + P0.
+- **C4. Freshness / supersede / contradiction down-weight** — M, high. Auto-create
+  contradicts/supersedes edges on Put when near-topic + changed-value or negation
+  cues; penalize FROM-side-of-contradicts and older same-topic memories in scoring.
+  Optional bi-temporal `valid_from/valid_to` (needs schema ALTER). Depends on C2 + P0.
+- **C5. Procedural workflow induction (mechanical AWM)** — L, transformative. Offline
+  `ghost mine-procedures`: frequent-sequence/n-gram mining over command/tool-call
+  sequences → procedural memories with frequency-scaled importance. Depends on C1 + P0.
+- **C6. Near-dup content guard on Put** — S/M, med. Cosine-compare new content vs
+  current latest version before versioning; bump access instead of churning a 51st copy.
+
+### Tier 3 — Deeper (M, needs decisions)
+
+- **D1. Native recall-coverage check + self-heal + MinScore defaults** — M, med. Port
+  `recall_verify` coverage into `Context`; auto-escalate a targeted search on missed
+  salient tokens; set sensible shell `MinScore/MinSpread`; raise 38% budget fill.
+- **D2. Utility-driven, rehearsal-aware lifecycle (SM-2)** — M, med. Per-memory
+  ease/interval (schema ALTER); demote on low-utility-AND-stale, not bare 7-day age;
+  decay `access_count` over time.
+- **D3. Reranker in production** — L, high (open). Largest measured lever (+64% HaluMem
+  MRR) is OFF: GO backend ~18.7s/query; fast ORT regresses via sigmoid clipping. Fix
+  ORT normalization or run selective GO rerank on low-confidence queries only.
+
+### Explicitly NOT doing
+
+- **SPLADE / ColBERT** — XL effort, low impact. Trades the single-binary/pure-Go
+  simplicity that *is* ghost's differentiator for a retrieval ceiling the personal-agent
+  use case doesn't need. Ghost already hits R@5 0.908.
+
+## Risks
+
+- Scoring changes risk regressing the strong public numbers — gate every one behind an
+  env knob and A/B on **both** the public suite and the new personal eval.
+- Densifying edges risks spurious associations — corroborate with entity/topic, not
+  cosine alone.
+- LLM-free capture has lower fidelity than `claude -p` — ship as default, measure
+  precision/recall, keep LLM as opt-in quality tier.
+- Destructive compaction on live DBs — dry-run-first, opt-in, backed up.
+- Schema ALTERs (bi-temporal, ease) need explicit sign-off per CONVENTIONS.md.
+
+## Open decisions (see conversation)
+
+1. Additive `ALTER ADD COLUMN` approval for (a) bi-temporal `valid_from/valid_to`,
+   (b) spaced-repetition `ease/interval`.
+2. New CLI subcommands: `ghost capture`, `ghost relink`, `ghost mine-procedures`,
+   new `gc` flags — approve the set, or fold some into existing commands.
+3. Capture strategy: replace `claude -p` as default, or two-tier (mechanical always-on
+   + optional LLM pass)?
+4. Dedup threshold: 0.92 (fewer false merges) vs 0.82 (more aggressive)?
+5. One-time supervised compaction + relink backfill over the live DB (backed up), or
+   forward-only on new data?
