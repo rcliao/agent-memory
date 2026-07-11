@@ -65,6 +65,12 @@ func PersonalSeedCorpus() []SeedMemory {
 		{NS: PersonalNS, Key: "auth-new", Kind: "semantic", Tier: "stm", Priority: "high", Importance: 0.6,
 			BackdateHours: 4, Content: "The API now uses OAuth2 bearer tokens for authentication instead of API keys."},
 
+		// ── Utility pair: same relevance, different proven usefulness ─────
+		{NS: PersonalNS, Key: "util-high", Kind: "semantic", Tier: "ltm", Priority: "normal", Importance: 0.5,
+			AccessCount: 25, UtilityCount: 20, Content: "Deploys always go through the staging pipeline first."},
+		{NS: PersonalNS, Key: "util-low", Kind: "semantic", Tier: "ltm", Priority: "normal", Importance: 0.5,
+			AccessCount: 25, UtilityCount: 0, Content: "Deploys occasionally touch the staging pipeline setup."},
+
 		// ── Noise so retrieval is not trivial ─────────────────────────────
 		{NS: PersonalNS, Key: "noise-standup", Kind: "episodic", Tier: "ltm", Priority: "low", Importance: 0.3,
 			Content: "The team standup meeting is at 10am on weekdays."},
@@ -109,5 +115,8 @@ func PersonalCases() []PersonalCase {
 
 		{Name: "auth-contradiction", Category: "contradiction-surfacing", Query: "how does the API do authentication", UseContext: true,
 			Relevant: []string{"auth-new"}, MustInclude: []string{"auth-new", "auth-old"}},
+
+		{Name: "utility-deploy", Category: "utility-recall", Query: "how do deploys use the staging pipeline", UseContext: true,
+			Relevant: []string{"util-high"}, PreferOver: [2]string{"util-high", "util-low"}},
 	}
 }

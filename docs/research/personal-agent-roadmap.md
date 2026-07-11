@@ -67,10 +67,11 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
 - **Q1. Same-day recall scoring fix** — S, high. Apply `SessionScope` boost as a floor
   or *before* the tier multiplier (not a multiply on a 0.1 base) so a today's fact
   outranks a 60-day summary. Add a regression test. `internal/store/context.go`.
-- **Q2. Utility into ranking** — S, high. Blend bounded `utility_ratio =
-  utility/max(1,access)` into `computeContextScore` + the search re-sort, behind an
-  env weight knob for A/B. Tighten the co-retrieval increment (edge.go:493) from
-  +1-for-all to token-overlap-gated. `context.go`, `search.go`, `edge.go`.
+- **Q2. Utility into ranking** — 🟡 **Partial: opt-in shipped (2026-07-10, `GHOST_UTILITY_WEIGHT`).**
+  `computeContextScore` now blends `utility_count/access_count × w` (default 0=off); utility-recall
+  eval slice + knob test added. Also fixed a pre-existing nondeterministic context tie-break (now
+  breaks ties by priority then key). Remaining: search.go re-sort blend + tighten the co-retrieval
+  increment (edge.go:493) from +1-for-all to token-overlap-gated.
 - **Q3. Storage compaction** — S, high. `ghost gc --prune-superseded` +
   `--purge-deleted <age>` + `VACUUM`. Reclaims ~1,656 rows / 1,667 chunks on the live
   DB. Dry-run first, opt-in. Retrieval already joins `MAX(version)` so answers are
