@@ -187,13 +187,15 @@ func TestEvalPersonalABMatrix(t *testing.T) {
 		}
 	})
 
+	// Explicit knob control: freshness now defaults ON, so the off-baseline must
+	// set GHOST_FRESHNESS=0 to be a true "nothing on" comparison point.
 	configs := []struct {
 		name string
 		env  map[string]string
 	}{
-		{"default", nil},
+		{"baseline", map[string]string{"GHOST_FRESHNESS": "0"}},
 		{"freshness", map[string]string{"GHOST_FRESHNESS": "1"}},
-		{"utility", map[string]string{"GHOST_UTILITY_WEIGHT": "0.6"}},
+		{"utility", map[string]string{"GHOST_FRESHNESS": "0", "GHOST_UTILITY_WEIGHT": "0.6"}},
 		{"both", map[string]string{"GHOST_FRESHNESS": "1", "GHOST_UTILITY_WEIGHT": "0.6"}},
 	}
 
