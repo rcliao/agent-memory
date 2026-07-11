@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -394,7 +396,7 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 	if p.Relink && !p.DryRun {
 		if p.NS == "" {
 			result.Errors = append(result.Errors, "relink requires a namespace (--ns)")
-		} else if n, err := s.BenchBuildEdges(ctx, p.NS); err != nil {
+		} else if n, err := s.buildEdges(ctx, p.NS, relinkMaxPerNode()); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("relink: %v", err))
 		} else {
 			result.Relinked = n
@@ -402,6 +404,19 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 	}
 
 	return result, nil
+}
+
+// relinkMaxPerNode is the cap on edges per memory during --relink, keeping only
+// each memory's strongest associations to avoid hub explosion on personal
+// stores with common shared entities. Override with GHOST_RELINK_MAX (0 =
+// uncapped). Default 8.
+func relinkMaxPerNode() int {
+	if env := os.Getenv("GHOST_RELINK_MAX"); env != "" {
+		if v, err := strconv.Atoi(env); err == nil && v >= 0 {
+			return v
+		}
+	}
+	return 8
 }
 
 func ruleMatches(rule ReflectRule, m model.Memory, ageHours, unaccessedHours, utilityRatio float64) bool {

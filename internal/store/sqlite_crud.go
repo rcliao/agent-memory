@@ -517,12 +517,23 @@ func (s *SQLiteStore) BatchBenchInsert(ctx context.Context, ns string, sessions 
 }
 
 // BenchBuildEdges builds edges between memories in a namespace using three signals:
-//   1. Embedding cosine similarity (semantic relatedness)
-//   2. Named entity co-occurrence (shared people, places, things)
-//   3. Topic overlap (shared distinctive keywords via TF-IDF)
+//  1. Embedding cosine similarity (semantic relatedness)
+//  2. Named entity co-occurrence (shared people, places, things)
+//  3. Topic overlap (shared distinctive keywords via TF-IDF)
 //
 // This creates more meaningful edges than pure cosine similarity alone.
+//
+// Uncapped: every qualifying pair becomes an edge. Used by eval to preserve
+// benchmark behavior. For interactive relinking of large personal stores, use
+// buildEdges with a per-node cap to avoid hub explosion.
 func (s *SQLiteStore) BenchBuildEdges(ctx context.Context, ns string) (int, error) {
+	return s.buildEdges(ctx, ns, 0)
+}
+
+// buildEdges is the multi-signal linker. maxPerNode > 0 keeps only each memory's
+// top-N strongest edges (by weight), bounding total edges to ~maxPerNode·n and
+// preventing hub explosion on corpora with common shared entities/topics.
+func (s *SQLiteStore) buildEdges(ctx context.Context, ns string, maxPerNode int) (int, error) {
 	cosineThreshold := edgeAutoLinkThreshold()
 
 	// Load all memory IDs, content, and embeddings in namespace
@@ -561,14 +572,24 @@ func (s *SQLiteStore) BenchBuildEdges(ctx context.Context, ns string) (int, erro
 		allContents = append(allContents, content)
 	}
 
-	// Extract topics using TF-IDF across the corpus
+	// Extract topics using TF-IDF across the corpus. Batch form builds the
+	// document-frequency table once (O(total tokens)) instead of per-memory
+	// (O(n·corpus)), which is what made relinking large stores impractical.
+	allTopics := entity.ExtractTopicsBatch(allContents, 10)
 	for i := range mems {
-		mems[i].topics = entity.ExtractTopics(mems[i].content, allContents, 10)
+		if i < len(allTopics) {
+			mems[i].topics = allTopics[i]
+		}
 	}
 
 	// Pairwise comparison using all three signals
+	type cand struct {
+		j      int
+		weight float64
+	}
 	edgeCount := 0
 	for i := 0; i < len(mems); i++ {
+		var cands []cand
 		for j := i + 1; j < len(mems); j++ {
 			// Signal 1: Cosine similarity (if embeddings available)
 			var cosineSim float64
@@ -590,22 +611,31 @@ func (s *SQLiteStore) BenchBuildEdges(ctx context.Context, ns string) (int, erro
 				entityScore >= 0.15 || // at least ~1 shared entity out of ~5
 				topicScore >= 0.3 // meaningful topic overlap
 
-			if shouldLink {
-				// Weight = max of the three signals
-				weight := float32(cosineSim)
-				if float32(entityScore) > weight {
-					weight = float32(entityScore)
-				}
-				if float32(topicScore) > weight {
-					weight = float32(topicScore)
-				}
-
-				s.db.ExecContext(ctx,
-					`INSERT OR IGNORE INTO memory_edges (from_id, to_id, rel, weight, access_count, created_at)
-					 VALUES (?, ?, 'relates_to', ?, 0, datetime('now'))`,
-					mems[i].id, mems[j].id, weight)
-				edgeCount++
+			if !shouldLink {
+				continue
 			}
+			// Weight = max of the three signals
+			weight := cosineSim
+			if entityScore > weight {
+				weight = entityScore
+			}
+			if topicScore > weight {
+				weight = topicScore
+			}
+			cands = append(cands, cand{j: j, weight: weight})
+		}
+
+		// Keep only this memory's strongest edges when capped.
+		if maxPerNode > 0 && len(cands) > maxPerNode {
+			sort.Slice(cands, func(a, b int) bool { return cands[a].weight > cands[b].weight })
+			cands = cands[:maxPerNode]
+		}
+		for _, c := range cands {
+			s.db.ExecContext(ctx,
+				`INSERT OR IGNORE INTO memory_edges (from_id, to_id, rel, weight, access_count, created_at)
+				 VALUES (?, ?, 'relates_to', ?, 0, datetime('now'))`,
+				mems[i].id, mems[c.j].id, c.weight)
+			edgeCount++
 		}
 	}
 	return edgeCount, nil
