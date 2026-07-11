@@ -275,7 +275,7 @@ GHOST_PERSONAL_EVAL_OUT=/tmp/personal_eval.json go test ./internal/store/ -run T
 | procedural-recall | 2 | mrr ≥ 0.5 | 1.00 | — |
 | decision-recall | 2 | mrr ≥ 0.5 | 1.00 | — |
 | same-day-recall | 1 | fresh present | 1.00 | 1/1 |
-| freshness-update | 1 | fresh present | **0.12** | **0/1** |
+| freshness-update | 1 | fresh present | 0.17 | **1/1** (freshness now default-on) |
 | contradiction-surfacing | 1 | both surfaced | 0.50 | — |
 | utility-recall | 1 | useful present | 0.33 | records outranks |
 | **multi-hop** (edge-only) | 1 | evidence surfaced | 1.00 | — |
@@ -296,17 +296,18 @@ guessing:
 
 | config | pass | fresh↑ | util↑ | sameday↑ | multihop | abstain | meanMRR |
 |---|---|---|---|---|---|---|---|
-| default | 12/12 | 0 | 1 | 1 | y | y | 0.745 |
-| `GHOST_FRESHNESS=1` | 12/12 | **1** | 1 | 1 | y | y | **0.790** |
+| baseline (`GHOST_FRESHNESS=0`) | 12/12 | 0 | 1 | 1 | y | y | 0.745 |
+| freshness (**default**) | 12/12 | **1** | 1 | 1 | y | y | **0.790** |
 | `GHOST_UTILITY_WEIGHT=0.6` | 12/12 | 0 | 1 | 1 | y | y | 0.731 |
 | both | 12/12 | 1 | 1 | 1 | y | y | 0.734 |
 
-**Finding:** `GHOST_FRESHNESS` is a *net win* (meanMRR 0.745 → 0.790 and it flips the
-freshness gap) — a candidate for default-on pending the public-suite regression check.
-`GHOST_UTILITY_WEIGHT` does its targeted job (useful > useless) but slightly *lowers*
-aggregate MRR because the coarse co-retrieval utility signal reshuffles unrelated
-memories — motivating the roadmap's "gate the utility increment on query-token
-overlap" follow-up before it can default on.
+**Finding & decision:** `GHOST_FRESHNESS` is a *net win* (meanMRR 0.745 → 0.790 and it
+flips the freshness gap), so it was made **default-on** (2026-07-11; disable with
+`GHOST_FRESHNESS=0`). It never touches the Search/BenchInsert path, so the public
+benchmarks are unaffected. `GHOST_UTILITY_WEIGHT` does its targeted job (useful >
+useless) but slightly *lowers* aggregate MRR because the co-retrieval utility signal
+was coarse — since fixed to credit only direct query hits (`internal/store/edge.go`);
+it remains opt-in pending a re-measure.
 
 **What the baseline reveals:** recall of preferences/procedures/decisions is strong
 even on FTS alone, and the existing `contradicts` force-include correctly surfaces a
@@ -318,13 +319,13 @@ same-day scoring fix (Q1) are meant to move. Every future scoring change should 
 A/B'd here alongside the public suite so personalization quality is not traded away
 for benchmark recall.
 
-**Opt-in fix (`GHOST_FRESHNESS=1`):** LLM-free supersede detection. On write, when a
-memory announces a change ("we now use Vite **instead of** Webpack") and shares a
-named entity with an existing memory, ghost creates a `contradicts` edge (new → old,
-so force-include keeps the old fact visible) and diminishes the old memory's
-importance so the current truth ranks above it. Default OFF — existing behavior and
-the public benchmarks are untouched until this has been A/B'd on the full suite.
-`TestEvalPersonalFreshnessKnob` verifies that with the knob on, `new-bundler`
+**Freshness (`GHOST_FRESHNESS`, default ON):** LLM-free supersede detection. On write,
+when a memory announces a change ("we now use Vite **instead of** Webpack") and shares
+a named entity with an existing memory, ghost creates a `contradicts` edge (new → old,
+so force-include keeps the old fact visible) and diminishes the old memory's importance
+so the current truth ranks above it. Made default-on after the A/B showed a net win;
+disable with `GHOST_FRESHNESS=0`. Only affects the Put/Context path — the public
+benchmarks are unaffected. `TestEvalPersonalFreshnessKnob` verifies `new-bundler`
 outranks `old-bundler` (fresh-outranks-stale 0 → 1). See `internal/store/freshness.go`.
 
 **Opt-in fix (`GHOST_UTILITY_WEIGHT=<w>`):** utility into ranking. `utility_count`

@@ -102,8 +102,9 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
 - **C3. Write-time salience heuristic** — M, high. Mechanical importance scorer in
   Put/capture; promote logging-pattern turns to stm/0.55–0.7, keep chatter at
   sensory/0.3. Expose `PutParams.Salience`. Depends on C1 + P0.
-- **C4. Freshness / supersede / contradiction down-weight** — 🟡 **Partial: opt-in shipped
-  (2026-07-10, `GHOST_FRESHNESS=1`).** Put-time supersede detection (`internal/store/freshness.go`):
+- **C4. Freshness / supersede / contradiction down-weight** — ✅ **DEFAULT-ON (2026-07-11).**
+  Shipped opt-in, then A/B on the personal eval showed a net win (meanMRR 0.745→0.790) so
+  flipped to default (disable with `GHOST_FRESHNESS=0`). Never touches the Search benchmark path. Put-time supersede detection (`internal/store/freshness.go`):
   change-cue + entity overlap → auto `contradicts` edge (new→old) + importance demotion; closes the
   eval's freshness gap (0→1) with the knob on, default OFF pending a public-suite A/B. Remaining:
   scoring-side staleness penalty + optional bi-temporal `valid_from/valid_to`. — M, high. Auto-create

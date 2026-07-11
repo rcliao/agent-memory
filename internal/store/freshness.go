@@ -8,26 +8,29 @@ import (
 	"github.com/rcliao/ghost/internal/entity"
 )
 
-// Freshness / supersede detection (opt-in via GHOST_FRESHNESS=1).
+// Freshness / supersede detection (default ON; disable via GHOST_FRESHNESS=0).
 //
 // A personal agent must not resurface a fact that a newer one has replaced
-// ("we switched from Webpack to Vite"). When enabled, detectSupersede spots a
-// change announcement on write and, if the new memory shares a named entity
-// with an existing one, marks the older memory as superseded: it creates a
-// `contradicts` edge (new → old, so force-include still surfaces the old fact
-// for transparency) and diminishes the old memory's importance so the current
-// truth ranks above it.
+// ("we switched from Webpack to Vite"). detectSupersede spots a change
+// announcement on write and, if the new memory shares a named entity with an
+// existing one, marks the older memory as superseded: it creates a `contradicts`
+// edge (new → old, so force-include still surfaces the old fact for
+// transparency) and diminishes the old memory's importance so the current truth
+// ranks above it.
 //
-// This is fully LLM-free and requires no schema change. It is gated OFF by
-// default so existing behavior and the public benchmarks are untouched until
-// the change has been A/B'd; the personal-agent eval exercises it with the knob
-// on. See docs/eval.md and docs/research/personal-agent-roadmap.md (C4).
+// Fully LLM-free, no schema change. Only touches the Put/Context path — the
+// Search/BenchInsert path used by the public benchmarks is unaffected. Validated
+// as a net win on the personal-agent eval (meanMRR 0.745→0.790). See docs/eval.md
+// and docs/research/personal-agent-roadmap.md (C4).
 
 // changeCueRe matches phrases that announce a fact has changed.
 var changeCueRe = regexp.MustCompile(`(?i)\b(switched (from|to)|now use[sd]?|no longer|instead of|replaced|moved to|migrated to|updated to|deprecated|superseded)\b`)
 
-// freshnessEnabled reports whether opt-in supersede detection is active.
-func freshnessEnabled() bool { return os.Getenv("GHOST_FRESHNESS") == "1" }
+// freshnessEnabled reports whether supersede detection is active. Default ON
+// (validated as a net win on the personal-agent eval: meanMRR 0.745→0.790); set
+// GHOST_FRESHNESS=0 to disable. Never touches the Search/BenchInsert path used by
+// the public benchmarks — those remain unaffected.
+func freshnessEnabled() bool { return os.Getenv("GHOST_FRESHNESS") != "0" }
 
 // supersedeDemoteFactor is how much a superseded memory's importance is scaled.
 const supersedeDemoteFactor = 0.5

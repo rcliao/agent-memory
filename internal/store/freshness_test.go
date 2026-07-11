@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// TestDetectSupersedeOffByDefault confirms the feature is inert unless enabled.
-func TestDetectSupersedeOffByDefault(t *testing.T) {
+// TestDetectSupersedeDisabled confirms the feature is inert when GHOST_FRESHNESS=0.
+func TestDetectSupersedeDisabled(t *testing.T) {
+	t.Setenv("GHOST_FRESHNESS", "0")
 	s := newTestStore(t)
 	ctx := context.Background()
 	if _, err := s.Put(ctx, PutParams{NS: "t", Key: "old", Content: "We use Webpack to bundle the frontend.", Kind: "semantic", Importance: 0.6}); err != nil {
