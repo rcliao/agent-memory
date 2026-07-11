@@ -35,6 +35,14 @@ func seedPersonalStore(t *testing.T) *SQLiteStore {
 	}); err != nil {
 		t.Fatalf("create contradicts edge: %v", err)
 	}
+	// Multi-hop: link phoenix-arch → phoenix-ha so spreading activation can reach
+	// the answer the query itself doesn't name.
+	if _, err := s.CreateEdge(ctx, EdgeParams{
+		FromNS: PersonalNS, FromKey: "phoenix-arch",
+		ToNS: PersonalNS, ToKey: "phoenix-ha", Rel: "relates_to",
+	}); err != nil {
+		t.Fatalf("create relates_to edge: %v", err)
+	}
 	return s
 }
 
@@ -42,16 +50,16 @@ func seedPersonalStore(t *testing.T) *SQLiteStore {
 // procedural, decision, same-day, freshness, and contradiction slices. It gates
 // on the categories that should already pass at the FTS baseline and RECORDS the
 // ranking signals (fresh-over-stale) that upcoming scoring work is meant to move.
-func TestEvalPersonal(t *testing.T) {
-	s := seedPersonalStore(t)
-	ctx := context.Background()
-
+// runPersonalCases runs every personal scenario against a seeded store and
+// returns the scored results (no assertions) — shared by TestEvalPersonal and
+// the A/B matrix.
+func runPersonalCases(t *testing.T, ctx context.Context, s *SQLiteStore) []ScenarioResult {
 	var scenarios []ScenarioResult
 
 	for _, c := range PersonalCases() {
 		var keys []string
 		if c.UseContext {
-			res, err := s.Context(ctx, ContextParams{NS: PersonalNS, Query: c.Query, Budget: 1000})
+			res, err := s.Context(ctx, ContextParams{NS: PersonalNS, Query: c.Query, Budget: 1000, MinScore: c.MinScore})
 			if err != nil {
 				t.Fatalf("%s: context: %v", c.Name, err)
 			}
@@ -116,6 +124,19 @@ func TestEvalPersonal(t *testing.T) {
 					sc.Errors = append(sc.Errors, "must-include key not surfaced: "+k)
 				}
 			}
+		case "abstention":
+			// The tool must not fabricate: nothing should survive the score floor.
+			sc.Pass = len(keys) == 0
+			sc.Metrics["surfaced"] = float64(len(keys))
+			if !sc.Pass {
+				sc.Errors = append(sc.Errors, "fabricated results for an absent-answer query")
+			}
+		case "multi-hop":
+			// Answer only reachable via edge expansion.
+			sc.Pass = present
+			if !present {
+				sc.Errors = append(sc.Errors, "edge-only evidence not surfaced (spreading activation failed)")
+			}
 		default:
 			// same-day-recall, freshness-update: gate on presence only; ranking
 			// is the target metric recorded above.
@@ -124,6 +145,13 @@ func TestEvalPersonal(t *testing.T) {
 
 		scenarios = append(scenarios, sc)
 	}
+	return scenarios
+}
+
+// TestEvalPersonal seeds the personal store and asserts each slice's gate.
+func TestEvalPersonal(t *testing.T) {
+	s := seedPersonalStore(t)
+	scenarios := runPersonalCases(t, context.Background(), s)
 
 	report := buildPersonalReport(scenarios)
 	logPersonalReport(t, report)
@@ -133,6 +161,91 @@ func TestEvalPersonal(t *testing.T) {
 		if !sc.Pass {
 			t.Errorf("scenario %q (%s) failed: %v [metrics=%v]", sc.Name, sc.Category, sc.Errors, sc.Metrics)
 		}
+	}
+}
+
+// TestEvalPersonalABMatrix runs the full personal eval under each knob
+// configuration and prints a comparison matrix, so the eval itself measures the
+// impact of the opt-in personalization features. It is a measurement (it does
+// not fail) — read the logged table.
+func TestEvalPersonalABMatrix(t *testing.T) {
+	knobKeys := []string{"GHOST_FRESHNESS", "GHOST_UTILITY_WEIGHT"}
+	orig := map[string]*string{}
+	for _, k := range knobKeys {
+		if v, ok := os.LookupEnv(k); ok {
+			vv := v
+			orig[k] = &vv
+		}
+	}
+	t.Cleanup(func() {
+		for _, k := range knobKeys {
+			if orig[k] == nil {
+				os.Unsetenv(k)
+			} else {
+				os.Setenv(k, *orig[k])
+			}
+		}
+	})
+
+	configs := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"default", nil},
+		{"freshness", map[string]string{"GHOST_FRESHNESS": "1"}},
+		{"utility", map[string]string{"GHOST_UTILITY_WEIGHT": "0.6"}},
+		{"both", map[string]string{"GHOST_FRESHNESS": "1", "GHOST_UTILITY_WEIGHT": "0.6"}},
+	}
+
+	metricOf := func(scs []ScenarioResult, name, metric string) float64 {
+		for _, sc := range scs {
+			if sc.Name == name {
+				return sc.Metrics[metric]
+			}
+		}
+		return -1
+	}
+	passOf := func(scs []ScenarioResult, name string) bool {
+		for _, sc := range scs {
+			if sc.Name == name {
+				return sc.Pass
+			}
+		}
+		return false
+	}
+	yn := func(ok bool) string {
+		if ok {
+			return "y"
+		}
+		return "n"
+	}
+
+	ctx := context.Background()
+	t.Logf("── Personal-agent A/B matrix (FTS-only) — fresh↑/util↑/sameday↑ = fresh-outranks-stale ──")
+	t.Logf("%-10s | pass  | fresh↑ util↑ sameday↑ | multihop abstain | meanMRR", "config")
+	for _, cfg := range configs {
+		for _, k := range knobKeys {
+			os.Unsetenv(k)
+		}
+		for k, v := range cfg.env {
+			os.Setenv(k, v)
+		}
+		s := seedPersonalStore(t)
+		scs := runPersonalCases(t, ctx, s)
+		pass, mrrSum := 0, 0.0
+		for _, sc := range scs {
+			if sc.Pass {
+				pass++
+			}
+			mrrSum += sc.Metrics["mrr"]
+		}
+		t.Logf("%-10s | %2d/%2d | %5.0f %6.0f %8.0f | %8s %7s | %.3f",
+			cfg.name, pass, len(scs),
+			metricOf(scs, "bundler-update", "fresh_outranks_stale"),
+			metricOf(scs, "utility-deploy", "fresh_outranks_stale"),
+			metricOf(scs, "same-day-parking", "fresh_outranks_stale"),
+			yn(passOf(scs, "phoenix-failover")), yn(passOf(scs, "absent-topic")),
+			mrrSum/float64(len(scs)))
 	}
 }
 

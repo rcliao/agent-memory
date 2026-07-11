@@ -71,6 +71,21 @@ func PersonalSeedCorpus() []SeedMemory {
 		{NS: PersonalNS, Key: "util-low", Kind: "semantic", Tier: "ltm", Priority: "normal", Importance: 0.5,
 			AccessCount: 25, UtilityCount: 0, Content: "Deploys occasionally touch the staging pipeline setup."},
 
+		// ── Multi-hop pair: the answer is reachable ONLY by following an edge
+		//    from the memory the query matches (tests spreading activation —
+		//    the LLM-free substitute for an LLM reasoning across memories). The
+		//    query shares terms with `phoenix-arch` but NOT with `phoenix-ha`;
+		//    a relates_to edge between them is created in seedPersonalStore. ──
+		{NS: PersonalNS, Key: "phoenix-arch", Kind: "semantic", Tier: "ltm", Priority: "normal", Importance: 0.6,
+			Content: "Project Phoenix runs on the Postgres cluster."},
+		{NS: PersonalNS, Key: "phoenix-ha", Kind: "semantic", Tier: "ltm", Priority: "normal", Importance: 0.6,
+			Content: "It fails over to a standby replica automatically within seconds."},
+
+		// ── Abstention distractor: shares an incidental term ("connection")
+		//    with an absent-answer query, so naive retrieval would fabricate. ──
+		{NS: PersonalNS, Key: "pg-conn", Kind: "semantic", Tier: "ltm", Priority: "low", Importance: 0.4,
+			Content: "The Postgres connection uses SSL and a pool of ten."},
+
 		// ── Noise so retrieval is not trivial ─────────────────────────────
 		{NS: PersonalNS, Key: "noise-standup", Kind: "episodic", Tier: "ltm", Priority: "low", Importance: 0.3,
 			Content: "The team standup meeting is at 10am on weekdays."},
@@ -95,6 +110,15 @@ type PersonalCase struct {
 	// MustInclude keys that must ALL be present (e.g. a contradicting fact that
 	// must be force-surfaced).
 	MustInclude []string
+	// RequiresEdge marks a scenario whose answer is only reachable via edge
+	// expansion (the query shares no terms with the evidence). Measures the
+	// associative/spreading-activation path that edges/relink enable.
+	RequiresEdge bool
+	// ExpectAbstain marks a query with no true answer: the system should NOT
+	// fabricate one. Pass = no memory surfaces above MinScore.
+	ExpectAbstain bool
+	// MinScore is passed to Context (0 = no floor). Used by abstention cases.
+	MinScore float64
 }
 
 // PersonalCases returns the personal-agent eval scenarios.
@@ -118,5 +142,19 @@ func PersonalCases() []PersonalCase {
 
 		{Name: "utility-deploy", Category: "utility-recall", Query: "how do deploys use the staging pipeline", UseContext: true,
 			Relevant: []string{"util-high"}, PreferOver: [2]string{"util-high", "util-low"}},
+
+		// Associative multi-hop: query matches phoenix-arch; the answer lives in
+		// phoenix-ha, reachable only by following the relates_to edge.
+		{Name: "phoenix-failover", Category: "multi-hop", Query: "is Project Phoenix fault tolerant", UseContext: true,
+			Relevant: []string{"phoenix-ha"}, RequiresEdge: true},
+
+		// Abstention: a query with no term overlap to any memory must surface
+		// nothing — the tool abstains rather than packing noise to fill budget.
+		// (Discriminative abstention — an absent answer that shares an incidental
+		// term with a distractor, e.g. "Redis connection" vs the Postgres
+		// connection memory — is a vector-path property this FTS-only eval can't
+		// fairly measure; it needs the embedded variant.)
+		{Name: "absent-topic", Category: "abstention", Query: "photosynthesis chlorophyll thylakoid membrane", UseContext: true,
+			ExpectAbstain: true},
 	}
 }
