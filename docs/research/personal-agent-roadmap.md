@@ -89,7 +89,12 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
   `write_verify.go`/`recall_verify.go`, Mem0-style ADD/UPDATE/NOOP via embedding-dedup,
   kind inference, mechanical importance = novelty + cue-weight + emphasis. `ghost
   capture` CLI + `ghost-stop-heuristic.sh` hook. Keep `claude -p` as optional tier.
-- **C2. Densify the edge graph** — M, high. Promote the entity+topic multi-signal
+- **C2. Densify the edge graph** — 🟡 **Partial: backfill shipped (2026-07-10).** `ghost
+  reflect --relink` exposes the multi-signal linker (cosine OR shared entities OR topic
+  overlap) — works even with no embeddings (entity/topic), idempotent, folded into `reflect`
+  (no new subcommand / interface change). Fixes the live DB's isolated islands on demand.
+  Remaining: promote multi-signal linking into the hot-path `autoLinkEdges` default (carries
+  benchmark A/B risk → gate it). — M, high. Promote the entity+topic multi-signal
   linker (dormant in `BenchBuildEdges`, sqlite_crud.go:565) into hot-path
   `autoLinkEdges`; widen candidate window beyond `LIMIT 50`; add `ghost relink`
   (or `reflect --relink`) to backfill. `internal/store/edge.go`.

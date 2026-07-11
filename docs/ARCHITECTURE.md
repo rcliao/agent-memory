@@ -268,6 +268,7 @@ Edges have their own lifecycle managed alongside memory nodes:
 - **Edge re-linking**: When a memory is versioned (new ID supersedes old), all edges referencing the old ID are updated to point to the new ID within the same transaction.
 - **Edge decay**: During reflect, edges not accessed in 30+ days with <3 accesses have their weight multiplied by 0.9.
 - **Edge pruning**: Edges with weight < 0.05 are automatically deleted during reflect.
+- **Backfill (`ghost reflect --relink`)**: On demand, runs the multi-signal linker over a namespace — creating `relates_to` edges when memories share high cosine similarity, named entities, OR distinctive topics (TF-IDF). Unlike the hot-path auto-linker (cosine-only, embedder-required), this works even with no embeddings and rescues the isolated-island problem on an existing store. Idempotent (`INSERT OR IGNORE`); O(n²), a maintenance operation.
 
 ## MCP Server
 
