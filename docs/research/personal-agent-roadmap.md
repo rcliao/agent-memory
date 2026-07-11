@@ -53,7 +53,10 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
 
 ### Tier 0 — Foundation (do first; gates the tuning work)
 
-- **P0. Personal-agent eval harness** — L, transformative. `TestEvalPersonal*` over a
+- **P0. Personal-agent eval harness** — ✅ **Shipped (2026-07-10).** `TestEvalPersonal`
+  (`internal/store/eval_personal.go` + `_test.go`), 9 scenarios / 6 slices, JSON report via
+  `GHOST_PERSONAL_EVAL_OUT`. Baseline documented in `docs/eval.md`; already flags the
+  freshness-update ranking gap (fresh-outranks-stale 0/1). `TestEvalPersonal*` over a
   live-DB-shaped synthetic corpus, scored LLM-free by key/tag match, in the existing
   JSON report (no new tables). Slices: same-day-fact-recall, preference-recall,
   procedural-recall, decision-recall, freshness-suppression, contradiction-surfacing.

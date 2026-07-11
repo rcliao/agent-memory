@@ -249,6 +249,45 @@ Failed:     6 (all benchmark, no hard failures)
 | Utility feedback | Increase utility weight in context scoring, or add dedicated utility_ratio factor | Make utility signal meaningful | Open |
 | Context fill | Lower minimum score threshold for budget fill, or excerpt more memories | Budget util 38% → 70%+ | Open |
 
+## Personal-Agent Eval (in-repo, LLM-free)
+
+The public benchmarks below (LongMemEval / LoCoMo / HaluMem) measure conversational
+QA recall. They do **not** measure what a *personal* agent needs: recalling the
+user's stated preferences, their procedures, decisions, same-day facts, and — most
+importantly — **not** resurfacing a fact a newer one has superseded or contradicted.
+
+`TestEvalPersonal` (`internal/store/eval_personal.go` + `_test.go`) fills that gap.
+It seeds a small, realistically-shaped personal store (`agent:personal`) and scores
+nine scenarios across six slices, LLM-free, by key match. Runs FTS-only like the
+other in-repo `TestEval*` scenarios (no model download).
+
+```bash
+go test ./internal/store/ -run TestEvalPersonal -v
+# optional JSON report:
+GHOST_PERSONAL_EVAL_OUT=/tmp/personal_eval.json go test ./internal/store/ -run TestEvalPersonal
+```
+
+**Baseline (FTS-only, no embeddings):**
+
+| Slice | Scenarios | Gate | meanMRR | fresh-outranks-stale |
+|---|---|---|---|---|
+| preference-recall | 2 | mrr ≥ 0.5 | 1.00 | — |
+| procedural-recall | 2 | mrr ≥ 0.5 | 1.00 | — |
+| decision-recall | 2 | mrr ≥ 0.5 | 1.00 | — |
+| same-day-recall | 1 | fresh present | 1.00 | 1/1 |
+| freshness-update | 1 | fresh present | **0.12** | **0/1** |
+| contradiction-surfacing | 1 | both surfaced | 0.50 | — |
+
+**What the baseline reveals:** recall of preferences/procedures/decisions is strong
+even on FTS alone, and the existing `contradicts` force-include correctly surfaces a
+contradicted fact when the edge exists. The open gap is **freshness-update**: the
+current-truth memory ("we now use Vite") ranks *below* the stale one ("we use
+Webpack") — `fresh_outranks_stale = 0`. That slice is gated on presence only for now;
+the ranking metric is what the roadmap's freshness/supersede down-weight (C4) and
+same-day scoring fix (Q1) are meant to move. Every future scoring change should be
+A/B'd here alongside the public suite so personalization quality is not traded away
+for benchmark recall.
+
 ## External Benchmarks
 
 ### LongMemEval (ICLR 2025)
