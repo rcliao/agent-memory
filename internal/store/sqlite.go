@@ -208,6 +208,12 @@ func (s *SQLiteStore) migrate() error {
 	// Migrate: existing identity-tier memories become pinned LTM
 	s.db.Exec(`UPDATE memories SET pinned = 1, tier = 'ltm' WHERE tier = 'identity' AND pinned = 0`)
 
+	// Phase 6: spaced-repetition ease — a per-memory decay-resistance factor
+	// derived from proven usefulness (utility). Higher ease → survives idle
+	// stretches longer before demotion. Default 1.0 (neutral); existing rows
+	// keep neutral decay until reflect recomputes ease from their utility.
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN ease REAL NOT NULL DEFAULT 1.0`)
+
 	// Phase 5: similarity condition for reflect rules
 	s.db.Exec(`ALTER TABLE reflect_rules ADD COLUMN cond_similarity_gt REAL`)
 

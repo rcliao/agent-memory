@@ -73,7 +73,26 @@ type ReflectResult struct {
 	EdgesDecayed      int             `json:"edges_decayed,omitempty"`
 	EdgesPruned       int             `json:"edges_pruned,omitempty"`
 	Relinked          int             `json:"relinked,omitempty"`
+	EaseUpdated       int             `json:"ease_updated,omitempty"`
 	Errors            []string        `json:"errors,omitempty"`
+}
+
+// Ease (spaced-repetition decay resistance) parameters. ease = 1 + easePerUtility
+// * utility_count, capped at easeMax. utility 0 → ease 1.0 (neutral); a memory
+// useful ~15 times becomes maximally sticky.
+const (
+	easeMax        = 4.0
+	easePerUtility = 0.2
+)
+
+// easeFromUtility derives a memory's decay-resistance factor from how often it
+// proved useful when co-retrieved.
+func easeFromUtility(utilityCount int) float64 {
+	e := 1.0 + easePerUtility*float64(utilityCount)
+	if e > easeMax {
+		e = easeMax
+	}
+	return e
 }
 
 // Valid action operations.
@@ -279,6 +298,17 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 			if !ruleMatches(rule, m, ageHours, unaccessedHours, utilityRatio) {
 				continue
 			}
+			// D2 spaced-repetition: a proven-useful memory resists idle demotion.
+			// The stale-ltm demote threshold scales with the memory's ease
+			// (derived from utility), so something used usefully N times survives
+			// idle stretches ~N times longer. Useless memories (ease 1.0) are
+			// unaffected, as is the low-utility prune rule (no UnaccessedGTHours).
+			if rule.Action.Op == "DEMOTE" && rule.Cond.UnaccessedGTHours > 0 {
+				ease := easeFromUtility(m.UtilityCount)
+				if ease > 1.0 && unaccessedHours < rule.Cond.UnaccessedGTHours*ease {
+					continue // ease shields this memory from demotion this cycle
+				}
+			}
 			// Check for conflicts: PIN/PRESERVE beats destructive ops
 			actions = append(actions, memAction{id: m.ID, action: rule.Action, rule: rule.Name})
 			break // first matching rule wins per memory
@@ -391,6 +421,16 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 		s.decayEdges(ctx, result)
 	}
 
+	// Recompute per-memory ease from utility so the persisted column reflects
+	// current usefulness (used by the demote guard above and visible to callers).
+	if !p.DryRun {
+		if n, err := s.updateEaseFromUtility(ctx, p.NS); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("ease update: %v", err))
+		} else {
+			result.EaseUpdated = n
+		}
+	}
+
 	// Optional: backfill the associative graph with the multi-signal linker.
 	// Explicit/opt-in, so it runs even though the default auto-linker is cosine-only.
 	if p.Relink && !p.DryRun {
@@ -404,6 +444,26 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 	}
 
 	return result, nil
+}
+
+// updateEaseFromUtility recomputes the ease column for all live memories in the
+// namespace as 1 + easePerUtility*utility_count (capped at easeMax). Returns the
+// number of rows updated. One bulk statement — cheap even on large stores.
+func (s *SQLiteStore) updateEaseFromUtility(ctx context.Context, ns string) (int, error) {
+	query := `UPDATE memories SET ease = MIN(?, 1.0 + ? * utility_count) WHERE deleted_at IS NULL`
+	args := []interface{}{easeMax, easePerUtility}
+	if ns != "" {
+		if clause, nsArgs := ParseNSFilter(ns).SQL("ns"); clause != "" {
+			query += " AND " + clause
+			args = append(args, nsArgs...)
+		}
+	}
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }
 
 // relinkMaxPerNode is the cap on edges per memory during --relink, keeping only
