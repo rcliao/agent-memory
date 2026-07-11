@@ -121,7 +121,11 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
 - **D1. Native recall-coverage check + self-heal + MinScore defaults** — M, med. Port
   `recall_verify` coverage into `Context`; auto-escalate a targeted search on missed
   salient tokens; set sensible shell `MinScore/MinSpread`; raise 38% budget fill.
-- **D2. Utility-driven, rehearsal-aware lifecycle (SM-2)** — M, med. Per-memory
+- **D2. Utility-driven, rehearsal-aware lifecycle (SM-2)** — ✅ **Shipped (2026-07-11).** Added
+  `ease` column (schema ALTER, approved); reflect recomputes `ease = 1 + 0.2·utility_count` (cap 4)
+  and the stale-LTM demote threshold scales by ease, so proven-useful memories resist idle demotion.
+  Tests: shield/cap/dry-run/unit. Motivated by live finding: umbreon 96% / pika 60% dormant from
+  clock-based demotion. Per-memory
   ease/interval (schema ALTER); demote on low-utility-AND-stale, not bare 7-day age;
   decay `access_count` over time.
 - **D3. Reranker in production** — L, high (open). Largest measured lever (+64% HaluMem

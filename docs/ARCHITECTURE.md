@@ -228,6 +228,8 @@ Each rule has a **condition** (AND-joined fields) and an **action**:
 
 Pinned memories (`pinned = true`) are exempt from all lifecycle rules — they skip rule evaluation entirely.
 
+**Spaced-repetition ease (decay resistance).** Each memory carries an `ease` factor derived from proven usefulness: `ease = 1 + 0.2 × utility_count`, capped at 4.0 (utility 0 → ease 1.0, neutral). Reflect recomputes and persists it each cycle. The stale-LTM demotion threshold scales by ease, so a memory that proved useful N times survives idle stretches proportionally longer before demotion to `dormant` — durable preferences stay searchable across quiet periods, while never-useful memories decay on the normal 7-day schedule. Low-utility memories (ease ≈ 1.0) and the low-utility prune rule are unaffected.
+
 | Built-in Rule | Condition | Action |
 |---------------|-----------|--------|
 | `sys-promote-sensory` | sensory, >1h old, >1 access | PROMOTE to STM |
