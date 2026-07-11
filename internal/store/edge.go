@@ -465,9 +465,12 @@ func (s *SQLiteStore) decayEdges(ctx context.Context, result *ReflectResult) {
 // strengthenCoRetrievedEdges increments access_count and weight for edges
 // between memories that were returned together in the same context response.
 // Implements Hebbian learning: "neurons that fire together wire together."
-// Also gives a weak utility signal to co-retrieved memories — appearing together
-// in context is evidence of usefulness.
-func (s *SQLiteStore) strengthenCoRetrievedEdges(ctx context.Context, memoryIDs []string) {
+//
+// utilityIDs is the subset of memoryIDs that DIRECTLY matched the query (Phase-2
+// search hits, not edge-expansion passengers). Only those earn a utility_count
+// increment — "this memory answered a query" — so utility stays a grounded
+// usefulness signal rather than a second access counter. Pass nil to credit none.
+func (s *SQLiteStore) strengthenCoRetrievedEdges(ctx context.Context, memoryIDs []string, utilityIDs []string) {
 	if len(memoryIDs) < 2 {
 		return
 	}
@@ -489,13 +492,13 @@ func (s *SQLiteStore) strengthenCoRetrievedEdges(ctx context.Context, memoryIDs 
 		}
 	}
 
-	// Weak utility signal: co-retrieved memories are likely useful together.
-	// Increment utility_count for all co-retrieved memories (once per context call).
-	// This bootstraps the utility signal that was previously always zero.
-	if len(memoryIDs) > 0 {
+	// Grounded utility signal: credit only memories that directly matched the
+	// query (utilityIDs), not edge-expansion passengers pulled in by association.
+	// A memory that rode along via an edge did not prove useful TO the query.
+	if len(utilityIDs) > 0 {
 		placeholders := ""
 		args := []interface{}{}
-		for i, id := range memoryIDs {
+		for i, id := range utilityIDs {
 			if i > 0 {
 				placeholders += ","
 			}

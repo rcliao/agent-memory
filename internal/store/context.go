@@ -379,8 +379,19 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			}
 		}
 	}
+	// Only Phase-2 direct search hits earn utility credit (not edge passengers).
+	directHit := make(map[string]bool, len(results))
+	for _, r := range results {
+		directHit[r.ID] = true
+	}
+	var utilityIDs []string
+	for _, id := range returnedIDs {
+		if directHit[id] {
+			utilityIDs = append(utilityIDs, id)
+		}
+	}
 	if len(returnedIDs) > 1 {
-		s.strengthenCoRetrievedEdges(ctx, returnedIDs)
+		s.strengthenCoRetrievedEdges(ctx, returnedIDs, utilityIDs)
 	}
 
 	return result, nil
