@@ -1987,10 +1987,14 @@ func TestEvalReport(t *testing.T) {
 	// ── Reflect ──
 	// Reset counters and last_accessed_at that earlier search/context calls may have bumped,
 	// so reflect sees the original seed state for lifecycle assertions.
+	// Reset access_count, last_accessed_at AND utility_count — earlier search/
+	// context scenarios co-retrieve these targets and bump utility_count, which
+	// now feeds the ease-based demotion shield. Restore the seed's utility so
+	// lifecycle assertions see the intended "unused" state.
 	for _, key := range []string{"reflect-decay-target", "reflect-promote-target", "reflect-demote-target", "reflect-prune-target", "reflect-identity-safe"} {
 		sm := findSeed(key)
 		if sm != nil {
-			s.db.ExecContext(ctx, `UPDATE memories SET access_count = ?, last_accessed_at = NULL WHERE id = ?`, sm.AccessCount, ids[key])
+			s.db.ExecContext(ctx, `UPDATE memories SET access_count = ?, last_accessed_at = NULL, utility_count = ? WHERE id = ?`, sm.AccessCount, sm.UtilityCount, ids[key])
 		}
 	}
 	var preImportance float64
