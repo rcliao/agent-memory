@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/rcliao/ghost/internal/model"
@@ -58,20 +60,20 @@ func (s *SessionScope) boost(m model.Memory) float64 {
 
 // ContextParams holds parameters for context assembly.
 type ContextParams struct {
-	NS             string
-	Query          string
-	Kind           string
-	Tags           []string
-	Budget         int              // max tokens in output
-	PinTiers       []string         // tiers always injected first (e.g. ["identity", "ltm"])
-	PinBudget      int              // token budget reserved for pinned tiers (default: Budget/3)
-	SearchBudget   int              // remaining budget for query-relevant search (default: Budget - PinBudget)
-	EdgeExpansion  *EdgeExpansionConfig // edge expansion config; nil means use defaults
-	ExcludePinned  bool             // skip Phase 1 pinned memories, use full budget for search
-	MaxMemoryTokens int             // max tokens per memory; larger memories get excerpted (default: 400, 0 = no limit)
-	MinScore       float64          // absolute score floor; candidates below this are dropped (0 = no filter)
-	MinSpread      float64          // top-1 must exceed top-N by this delta (0 = no filter). Catches "flat noise" queries where retrieval couldn't discriminate.
-	Scope          *SessionScope    // optional: boost memories matching the current session window (chat tag, date tag, or since cutoff)
+	NS              string
+	Query           string
+	Kind            string
+	Tags            []string
+	Budget          int                  // max tokens in output
+	PinTiers        []string             // tiers always injected first (e.g. ["identity", "ltm"])
+	PinBudget       int                  // token budget reserved for pinned tiers (default: Budget/3)
+	SearchBudget    int                  // remaining budget for query-relevant search (default: Budget - PinBudget)
+	EdgeExpansion   *EdgeExpansionConfig // edge expansion config; nil means use defaults
+	ExcludePinned   bool                 // skip Phase 1 pinned memories, use full budget for search
+	MaxMemoryTokens int                  // max tokens per memory; larger memories get excerpted (default: 400, 0 = no limit)
+	MinScore        float64              // absolute score floor; candidates below this are dropped (0 = no filter)
+	MinSpread       float64              // top-1 must exceed top-N by this delta (0 = no filter). Catches "flat noise" queries where retrieval couldn't discriminate.
+	Scope           *SessionScope        // optional: boost memories matching the current session window (chat tag, date tag, or since cutoff)
 }
 
 // ContextMemory is a scored memory for context output.
@@ -204,9 +206,19 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		candidates = append(candidates, *sc)
 	}
 
-	// Sort by score descending
+	// Sort by score descending, with deterministic tie-breaks: on equal scores,
+	// prefer higher priority, then order by key. Without this, equal-scored
+	// candidates come back in map-iteration order (nondeterministic).
 	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].score > candidates[j].score
+		a, b := candidates[i], candidates[j]
+		if a.score != b.score {
+			return a.score > b.score
+		}
+		pa, pb := priorityScore(a.memory.Priority), priorityScore(b.memory.Priority)
+		if pa != pb {
+			return pa > pb
+		}
+		return a.memory.Key < b.memory.Key
 	})
 
 	// Confidence filter: drop low-score candidates and detect "flat noise"
@@ -554,7 +566,40 @@ func computeContextScore(m model.Memory, similarity float64, now time.Time, scop
 	// Kind-specific composite weights, then apply tier as multiplicative modifier
 	w := kindWeights(m.Kind)
 	base := relevance*w.relevance + recency*w.recency + importance*w.importance + accessFreq*w.access
+
+	// Opt-in utility term: reward memories that proved useful (co-retrieved) to
+	// THIS user. utility_count is captured but unused by default; GHOST_UTILITY_WEIGHT
+	// turns it into ranking lift. Additive so accessFreq stays intact. Default 0.
+	if uw := utilityWeight(); uw > 0 {
+		base += utilityRatio(m) * uw
+	}
+
 	return base * tierMultiplier(m.Tier) * scope.boost(m)
+}
+
+// utilityWeight is the opt-in weight for the utility signal (GHOST_UTILITY_WEIGHT,
+// default 0 = off). Gated pending a public-suite A/B; the personal-agent eval
+// exercises it with the knob on.
+func utilityWeight() float64 {
+	if env := os.Getenv("GHOST_UTILITY_WEIGHT"); env != "" {
+		if v, err := strconv.ParseFloat(env, 64); err == nil && v >= 0 && v <= 2 {
+			return v
+		}
+	}
+	return 0
+}
+
+// utilityRatio is utility_count / access_count, clamped to [0,1] — the fraction
+// of retrievals in which this memory proved useful.
+func utilityRatio(m model.Memory) float64 {
+	if m.AccessCount <= 0 {
+		return 0
+	}
+	r := float64(m.UtilityCount) / float64(m.AccessCount)
+	if r > 1 {
+		r = 1
+	}
+	return r
 }
 
 // loadPinnedMemories loads memories with pinned=1, ordered by importance.

@@ -277,6 +277,7 @@ GHOST_PERSONAL_EVAL_OUT=/tmp/personal_eval.json go test ./internal/store/ -run T
 | same-day-recall | 1 | fresh present | 1.00 | 1/1 |
 | freshness-update | 1 | fresh present | **0.12** | **0/1** |
 | contradiction-surfacing | 1 | both surfaced | 0.50 | — |
+| utility-recall | 1 | useful present | 0.33 | records outranks |
 
 **What the baseline reveals:** recall of preferences/procedures/decisions is strong
 even on FTS alone, and the existing `contradicts` force-include correctly surfaces a
@@ -296,6 +297,14 @@ importance so the current truth ranks above it. Default OFF — existing behavio
 the public benchmarks are untouched until this has been A/B'd on the full suite.
 `TestEvalPersonalFreshnessKnob` verifies that with the knob on, `new-bundler`
 outranks `old-bundler` (fresh-outranks-stale 0 → 1). See `internal/store/freshness.go`.
+
+**Opt-in fix (`GHOST_UTILITY_WEIGHT=<w>`):** utility into ranking. `utility_count`
+(how often a memory proved useful when co-retrieved) is captured but scored nowhere
+by default. Setting a weight adds `utility_count/access_count × w` to the context
+composite score, so memories that proved useful to *this* user rank higher. Default
+0 (off). `TestEvalPersonalUtilityKnob` verifies `util-high` outranks the
+equally-relevant `util-low` with the knob on. See `computeContextScore` in
+`internal/store/context.go`.
 
 ## External Benchmarks
 
