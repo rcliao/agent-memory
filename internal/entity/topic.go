@@ -23,30 +23,65 @@ func ExtractTopics(doc string, corpus []string, topN int) []Topic {
 	// Compute document frequency (how many documents each term appears in)
 	df := make(map[string]int)
 	for _, d := range corpus {
-		seen := make(map[string]bool)
-		for _, w := range tokenize(d) {
-			if !seen[w] {
-				df[w]++
-				seen[w] = true
-			}
-		}
+		addDocFreq(df, tokenize(d))
 	}
 
-	// Compute TF for the target document
-	tf := make(map[string]int)
-	docTokens := tokenize(doc)
-	for _, w := range docTokens {
-		tf[w]++
-	}
-
-	if len(docTokens) == 0 {
-		return nil
-	}
-
-	// Compute TF-IDF scores
 	numDocs := float64(len(corpus))
 	if numDocs < 1 {
 		numDocs = 1
+	}
+	return topicsFromTokens(tokenize(doc), df, numDocs, topN)
+}
+
+// ExtractTopicsBatch extracts topics for every document in a corpus while
+// building the document-frequency table only ONCE. This is O(total tokens)
+// instead of the O(n·corpus) cost of calling ExtractTopics per document, which
+// is quadratic and impractical on large stores (e.g. relinking thousands of
+// memories). Results align by index with docs.
+func ExtractTopicsBatch(docs []string, topN int) [][]Topic {
+	if topN <= 0 {
+		topN = 5
+	}
+
+	tokens := make([][]string, len(docs))
+	df := make(map[string]int)
+	for i, d := range docs {
+		tokens[i] = tokenize(d)
+		addDocFreq(df, tokens[i])
+	}
+
+	numDocs := float64(len(docs))
+	if numDocs < 1 {
+		numDocs = 1
+	}
+
+	out := make([][]Topic, len(docs))
+	for i := range docs {
+		out[i] = topicsFromTokens(tokens[i], df, numDocs, topN)
+	}
+	return out
+}
+
+// addDocFreq increments df for each distinct token in a document.
+func addDocFreq(df map[string]int, docTokens []string) {
+	seen := make(map[string]bool, len(docTokens))
+	for _, w := range docTokens {
+		if !seen[w] {
+			df[w]++
+			seen[w] = true
+		}
+	}
+}
+
+// topicsFromTokens scores a document's tokens by TF-IDF against a prebuilt df
+// table and returns the top-N distinctive topics.
+func topicsFromTokens(docTokens []string, df map[string]int, numDocs float64, topN int) []Topic {
+	if len(docTokens) == 0 {
+		return nil
+	}
+	tf := make(map[string]int, len(docTokens))
+	for _, w := range docTokens {
+		tf[w]++
 	}
 
 	type scored struct {
@@ -63,8 +98,13 @@ func ExtractTopics(doc string, corpus []string, topN int) []Topic {
 		scores = append(scores, scored{term: term, score: termTF * termIDF})
 	}
 
+	// Deterministic order: score desc, then term asc so equal-scored topics
+	// (common in short docs where every term has tf=1) don't reorder run-to-run.
 	sort.Slice(scores, func(i, j int) bool {
-		return scores[i].score > scores[j].score
+		if scores[i].score != scores[j].score {
+			return scores[i].score > scores[j].score
+		}
+		return scores[i].term < scores[j].term
 	})
 
 	if len(scores) > topN {
