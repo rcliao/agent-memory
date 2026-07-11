@@ -287,10 +287,12 @@ Started via `ghost mcp-serve` subcommand. See [Claude Code Setup](quickstart-cla
 
 ### Automated Memory via Hooks
 
-Claude Code hooks can automate memory capture without relying on the agent remembering to call `ghost_put`. Both hooks use `type: "command"` shell scripts that pipe the session transcript to `claude -p` (headless mode) for analysis, then execute the resulting `ghost put` CLI commands.
+Claude Code hooks can automate memory capture without relying on the agent remembering to call `ghost_put`. Capture is **two-tier**:
 
-- **PreCompact hook (async)** — fires before context compression on long sessions. Reads the last ~100 transcript lines, extracts learnings, stores them via `ghost` CLI. Zero latency cost.
-- **Stop hook (async)** — fires after each agent turn. Same pattern but reads more transcript (last ~200 lines) as the final chance to capture learnings. Zero latency cost.
+- **Mechanical tier (LLM-free, default)** — `hooks/ghost-stop-heuristic.sh` flattens the transcript to plain text and pipes it to `ghost capture`, which extracts candidates with deterministic heuristics only: rule-based entity salience (`internal/entity`) plus regex intent classifiers (preference / correction / decision / gotcha / procedural / fact) in `internal/capture`. Each candidate gets an inferred kind, a mechanical importance score, and a descriptive key, then flows through the normal `Put` dedup path. No API key required; runs offline and instantly.
+- **LLM tier (optional, higher fidelity)** — `hooks/ghost-stop.sh` and `hooks/ghost-precompact.sh` pipe the transcript to `claude -p` for extraction, then store via `ghost put`. The LLM can also emit candidates in `ghost capture`'s JSON shape and commit them via `ghost capture --json`, so both tiers converge on one write path. Zero latency cost (async).
+
+The two tiers dedup against each other, so they can run together — mechanical always-on, LLM as an upgrade.
 
 See the [hooks section](quickstart-claude-code.md#2-add-hooks) in the Claude Code Setup guide.
 
@@ -313,6 +315,7 @@ The public `Store` interface is a subset of the internal one — core CRUD, sear
 | Command | Description |
 |---------|-------------|
 | `put` | Store or update a memory |
+| `capture` | Extract + store memories from raw text using deterministic heuristics (no LLM). Also ingests LLM-produced candidates via `--json` |
 | `get` | Retrieve by namespace + key |
 | `list` | List memories (filterable by ns, kind, tags) |
 | `rm` | Soft-delete (or hard-delete) |
