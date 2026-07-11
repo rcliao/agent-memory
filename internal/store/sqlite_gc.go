@@ -18,6 +18,87 @@ type GCStaleResult struct {
 	ProtectedCount  int64
 }
 
+// PurgeResult holds the result of purging soft-deleted memories.
+type PurgeResult struct {
+	MemoriesPurged int64
+	ChunksFreed    int64
+}
+
+// purgeSelector matches soft-deleted memories older than the cutoff.
+const purgeSelector = `SELECT id FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ?`
+
+// PurgeDeletedDryRun counts soft-deleted memories (and their chunks) older than
+// olderThan without deleting anything. olderThan == 0 counts all soft-deleted.
+func (s *SQLiteStore) PurgeDeletedDryRun(ctx context.Context, olderThan time.Duration) (PurgeResult, error) {
+	cutoff := time.Now().UTC().Add(-olderThan).Format(time.RFC3339)
+	var r PurgeResult
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ?`, cutoff).Scan(&r.MemoriesPurged); err != nil {
+		return r, err
+	}
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM chunks WHERE memory_id IN (`+purgeSelector+`)`, cutoff).Scan(&r.ChunksFreed); err != nil {
+		return r, err
+	}
+	return r, nil
+}
+
+// PurgeDeleted permanently removes soft-deleted memories older than olderThan
+// (0 = all soft-deleted) plus their chunks, edges, links, and file refs. Live
+// memories are never touched — retrieval always joins on the latest live version,
+// so results are unaffected; only dead rows and their orphaned embeddings are
+// reclaimed. Run Vacuum afterward to shrink the file.
+func (s *SQLiteStore) PurgeDeleted(ctx context.Context, olderThan time.Duration) (PurgeResult, error) {
+	cutoff := time.Now().UTC().Add(-olderThan).Format(time.RFC3339)
+	var r PurgeResult
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return r, err
+	}
+	defer tx.Rollback()
+
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM chunks WHERE memory_id IN (`+purgeSelector+`)`, cutoff).Scan(&r.ChunksFreed); err != nil {
+		return r, err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM memory_edges WHERE from_id IN (`+purgeSelector+`) OR to_id IN (`+purgeSelector+`)`, cutoff, cutoff); err != nil {
+		return r, fmt.Errorf("purge edges: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM memory_links WHERE from_id IN (`+purgeSelector+`) OR to_id IN (`+purgeSelector+`)`, cutoff, cutoff); err != nil {
+		return r, fmt.Errorf("purge links: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM memory_files WHERE memory_id IN (`+purgeSelector+`)`, cutoff); err != nil {
+		return r, fmt.Errorf("purge file refs: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM chunks WHERE memory_id IN (`+purgeSelector+`)`, cutoff); err != nil {
+		return r, fmt.Errorf("purge chunks: %w", err)
+	}
+	res, err := tx.ExecContext(ctx,
+		`DELETE FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ?`, cutoff)
+	if err != nil {
+		return r, fmt.Errorf("purge memories: %w", err)
+	}
+	r.MemoriesPurged, _ = res.RowsAffected()
+
+	if err := tx.Commit(); err != nil {
+		return r, err
+	}
+	return r, nil
+}
+
+// Vacuum rebuilds the database file to reclaim space freed by deletes. Cannot
+// run inside a transaction.
+func (s *SQLiteStore) Vacuum(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `VACUUM`)
+	return err
+}
+
 // GCStaleDryRun counts stale memories (not accessed within the given duration)
 // without deleting them. Memories with priority "high" or "critical" are skipped.
 func (s *SQLiteStore) GCStaleDryRun(ctx context.Context, staleThreshold time.Duration) (GCStaleResult, error) {
