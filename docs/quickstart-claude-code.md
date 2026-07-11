@@ -31,7 +31,7 @@ Or for project-scoped (add to `.mcp.json` in repo root):
 }
 ```
 
-This exposes 9 tools to the agent:
+This exposes 10 tools to the agent:
 
 | Tool | Category | Purpose |
 |------|----------|---------|
@@ -43,7 +43,11 @@ This exposes 9 tools to the agent:
 | `ghost_consolidate` | Write | Create a summary memory with contains edges to sources in one operation |
 | `ghost_curate` | Mutate | Instance-level lifecycle actions on a single memory |
 | `ghost_edge` | Mutate | Create, remove, or list weighted edges between memories |
+| `ghost_edge_candidates` | Mutate | List relates_to pairs lacking a typed reasoning edge, for an agent to classify |
 | `ghost_reflect` | Maintain | Run lifecycle rules across all memories (promote, decay, prune, edge decay) |
+
+> CLI-only (not exposed over MCP): `ghost capture`, `ghost mine-procedures`, `ghost reflect --relink`,
+> `ghost gc --purge-deleted`. Run these from hooks or on a schedule.
 
 ---
 

@@ -2,6 +2,11 @@
 
 Persistent memory for AI agents. Text in, text out. SQLite-backed, single binary, no server.
 
+**LLM-free by design.** Capture, retrieval, ranking, linking, and lifecycle all run on
+local models and deterministic rules — no API key, no network, nothing to page out to a
+provider. Retrieval is SOTA-competitive (LongMemEval_S **Recall@5 0.908 / MRR 0.827**, beating
+published BM25/Contriever) using only local embeddings + an optional local cross-encoder.
+
 ## Install
 
 ```bash
@@ -29,6 +34,14 @@ ghost put -n agent:mybot -k "session-token" --ttl 24h "abc123"
 
 # Pipe content from stdin
 cat session-notes.md | ghost put -n agent:mybot -k "session-2026-03-13" --kind episodic
+
+# Capture memories from raw text/transcript with NO LLM (heuristic extraction)
+cat session.md | ghost capture -n agent:mybot --source session:abc
+# ...or feed LLM-produced candidates through the same dedup/store path
+echo '[{"content":"...","key":"...","kind":"semantic","importance":0.7}]' | ghost capture -n agent:mybot --json
+
+# Induce recurring workflows into procedural memories (one session per line)
+printf 'edit build test commit\nbuild test commit\n' | ghost mine-procedures -n agent:mybot
 
 # Retrieve
 ghost get -n agent:mybot -k "auth-design"
@@ -68,13 +81,23 @@ ghost rule set --name "fast-promote" --cond-tier stm --cond-age-gt 12 \
 
 ## Key Features
 
+- **LLM-free capture**: `ghost capture` turns raw text/transcripts into memories via deterministic
+  heuristics (entity salience + intent classifiers) — no LLM needed. Also ingests LLM-produced
+  candidates via `--json` (two-tier: mechanical always-on, LLM as an optional quality upgrade).
+- **Procedural workflow induction**: `ghost mine-procedures` mines recurring usage sequences into
+  procedural memories — the agent learns "how you work" by frequency, no LLM.
 - **Three-phase context assembly**: pinned memories + search + edge expansion (spreading activation)
-- **DAG-based retrieval**: weighted edges between memories, auto-linked on put via embedding similarity
+- **DAG-based retrieval**: weighted edges between memories, auto-linked on put; `reflect --relink`
+  backfills a dense multi-signal graph (cosine OR shared entities OR topics) even without embeddings
+- **Personalization-aware ranking**: freshness/supersede detection (default on), utility-into-ranking,
+  and spaced-repetition ease so proven-useful memories resist idle decay
 - **Cognitive memory model**: Tulving's taxonomy (semantic/episodic/procedural) with kind-specific scoring
 - **Lifecycle management**: sensory → stm → ltm → dormant tiers with rule-based reflect system
 - **Hierarchical summaries**: `ghost consolidate` creates summary parents that suppress children in context
-- **Vector embeddings**: all-MiniLM-L6-v2 (pure Go, no CGo) fused with FTS5 via Reciprocal Rank Fusion
-- **MCP server**: `ghost mcp-serve` exposes 9 tools for Claude Code and other MCP clients
+- **Vector embeddings**: all-MiniLM-L6-v2 (pure Go, no CGo) fused with FTS5 via Reciprocal Rank Fusion,
+  plus an optional local cross-encoder reranker
+- **Storage compaction**: `ghost gc --purge-deleted` reclaims soft-deleted rows + orphaned embeddings
+- **MCP server**: `ghost mcp-serve` exposes 10 tools for Claude Code and other MCP clients
 
 ## Namespace Conventions
 
@@ -93,6 +116,8 @@ Tags provide categorization within a namespace: `identity`, `lore`, `project:<na
 | Command | Description |
 |---------|-------------|
 | `put` | Store or update a memory (auto-links similar via edges) |
+| `capture` | Extract + store memories from raw text/transcripts (deterministic, no LLM; `--json` ingests LLM candidates) |
+| `mine-procedures` | Induce recurring workflows from usage sequences into procedural memories (no LLM) |
 | `get` | Retrieve by namespace + key |
 | `list` | List memories (filterable by ns, kind, tags) |
 | `rm` | Soft-delete a memory (or hard-delete with `--hard`) |
@@ -112,9 +137,9 @@ Tags provide categorization within a namespace: `identity`, `lore`, `project:<na
 | Command | Description |
 |---------|-------------|
 | `curate` | Single-memory lifecycle actions (promote, demote, boost, diminish, archive, delete, pin, unpin) |
-| `reflect` | Run lifecycle rules (promote, decay, link similar, prune edges) |
+| `reflect` | Run lifecycle rules (promote, decay, prune edges); `--relink` backfills the multi-signal edge graph |
 | `rule` | Manage reflect rules (set, get, list, delete) |
-| `gc` | Garbage collect expired/stale memories |
+| `gc` | Garbage collect expired/stale memories; `--purge-deleted <age\|all> [--vacuum]` reclaims soft-deleted rows + orphaned chunks |
 
 ### Inspection
 
@@ -180,7 +205,7 @@ ghost consolidate -n agent:mybot --summary-key auth-overview \
 claude mcp add --scope user --transport stdio ghost -- ghost mcp-serve
 ```
 
-Exposes 9 tools: `ghost_put`, `ghost_get`, `ghost_search`, `ghost_context`, `ghost_expand`, `ghost_consolidate`, `ghost_edge`, `ghost_curate`, `ghost_reflect`.
+Exposes 10 tools: `ghost_put`, `ghost_get`, `ghost_search`, `ghost_context`, `ghost_expand`, `ghost_consolidate`, `ghost_edge`, `ghost_edge_candidates`, `ghost_curate`, `ghost_reflect`.
 
 See [Claude Code Setup](docs/quickstart-claude-code.md) for full setup including hooks and CLAUDE.md instructions.
 
@@ -192,6 +217,38 @@ Database location (in order of precedence):
 3. `~/.ghost/memory.db`
 
 Pure Go SQLite (`modernc.org/sqlite`), WAL mode, no CGo.
+
+## Tuning (environment variables)
+
+All defaults are sensible; these tune the personalization and retrieval behavior. None require an LLM.
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `GHOST_FRESHNESS` | `1` (on) | Supersede detection: a change announcement ("now use X instead of Y") that shares an entity with an existing memory demotes the old one and links them. Set `0` to disable. |
+| `GHOST_UTILITY_WEIGHT` | `0` (off) | Blend proven usefulness (`utility_count/access_count`) into context ranking. |
+| `GHOST_EDGE_THRESHOLD` | `0.85` | Cosine threshold for auto-linking edges on `put`. |
+| `GHOST_RELINK_MAX` | `8` | Max edges per memory kept by `reflect --relink` (0 = uncapped). |
+| `GHOST_EMBED_PROVIDER` | `local` | Embedding backend: `local` (all-MiniLM, pure Go), `ollama`, `openai`, or `none`. |
+| `GHOST_RERANKER` | off | `local` enables the cross-encoder reranker (ms-marco-MiniLM). |
+| `GHOST_DB` | `~/.ghost/memory.db` | Database path. |
+
+Lifecycle also applies **spaced-repetition ease** automatically during `reflect`: memories that repeatedly
+prove useful (`utility_count`) become decay-resistant and survive idle stretches longer before demotion.
+
+## Benchmarks
+
+Retrieval is measured against published long-term-memory benchmarks — all LLM-free (local models only):
+
+| Benchmark | Metric | Ghost |
+|-----------|--------|-------|
+| LongMemEval_S (470q) | Recall@5 / MRR | **0.908 / 0.827** |
+| LoCoMo (best config) | Recall@5 / MRR | 0.750 / 0.595 |
+| HaluMem-Medium (retrieval, +rerank) | MRR gain | +64% |
+
+A separate **personal-agent eval** (`internal/store/eval_personal*`) measures what public benchmarks don't —
+preference / procedural / decision recall, same-day recall, freshness-suppression, contradiction-surfacing,
+edge-based multi-hop, and abstention — with an A/B matrix over the personalization knobs and an embedded
+(vector-path) variant. See [Eval Framework](docs/eval.md).
 
 ## Documentation
 
