@@ -67,3 +67,45 @@ func TestEvalPersonalUtilityKnob(t *testing.T) {
 		t.Errorf("with utility weight on, util-high (rank %d) should outrank util-low (rank %d); keys=%v", pHi, pLo, keys)
 	}
 }
+
+// TestGroundedUtilityCreditsOnlyDirectHits verifies utility_count is credited to
+// the memory that DIRECTLY matched the query, not to a memory pulled in only via
+// edge expansion — keeping utility a grounded "answered a query" signal.
+func TestGroundedUtilityCreditsOnlyDirectHits(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	mustPut := func(key, content string) {
+		if _, err := s.Put(ctx, PutParams{NS: "t", Key: key, Content: content, Kind: "semantic", Importance: 0.6, SkipAutoLink: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustPut("db", "Postgres is our primary database for storage.")
+	mustPut("moon", "The moon is made of green cheese apparently.")
+	// Link them so 'moon' can be pulled in via edge expansion from 'db'.
+	if _, err := s.CreateEdge(ctx, EdgeParams{FromNS: "t", FromKey: "db", ToNS: "t", ToKey: "moon", Rel: "relates_to"}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.Context(ctx, ContextParams{NS: "t", Query: "what database do we use", Budget: 4000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contextHasKey(res, "db") {
+		t.Fatalf("db (direct hit) should be returned; keys=%v", contextKeys(res))
+	}
+	if !contextHasKey(res, "moon") {
+		t.Skip("moon not pulled via edge expansion in this config; nothing to distinguish")
+	}
+
+	util := func(key string) int {
+		var u int
+		s.db.QueryRow(`SELECT utility_count FROM memories WHERE ns='t' AND key=? AND deleted_at IS NULL ORDER BY version DESC LIMIT 1`, key).Scan(&u)
+		return u
+	}
+	if util("db") != 1 {
+		t.Errorf("direct-hit 'db' should earn utility_count 1, got %d", util("db"))
+	}
+	if util("moon") != 0 {
+		t.Errorf("edge-passenger 'moon' must NOT earn utility credit, got %d", util("moon"))
+	}
+}

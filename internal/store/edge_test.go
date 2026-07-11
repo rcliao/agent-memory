@@ -412,8 +412,8 @@ func TestCoRetrievalStrengthening(t *testing.T) {
 		t.Fatalf("expected initial access count 0, got %d", edges[0].AccessCount)
 	}
 
-	// Simulate co-retrieval
-	s.strengthenCoRetrievedEdges(ctx, []string{memA.ID, memB.ID})
+	// Simulate co-retrieval (both count as direct hits for utility)
+	s.strengthenCoRetrievedEdges(ctx, []string{memA.ID, memB.ID}, []string{memA.ID, memB.ID})
 
 	// Verify strengthening: weight should increase, access count should be 1
 	edges2, _ := s.GetEdges(ctx, memA.ID)
