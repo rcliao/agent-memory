@@ -215,6 +215,10 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		s.autoLinkEdges(ctx, id, p.NS, firstChunkVec)
 	}
 
+	// Opt-in freshness: if this memory announces a change, mark the superseded
+	// one. Cheap no-op unless GHOST_FRESHNESS=1. Best-effort.
+	s.detectSupersede(ctx, id, p.NS, p.Key, p.Content)
+
 	mem := &model.Memory{
 		ID:         id,
 		NS:         p.NS,

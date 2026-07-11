@@ -288,6 +288,15 @@ same-day scoring fix (Q1) are meant to move. Every future scoring change should 
 A/B'd here alongside the public suite so personalization quality is not traded away
 for benchmark recall.
 
+**Opt-in fix (`GHOST_FRESHNESS=1`):** LLM-free supersede detection. On write, when a
+memory announces a change ("we now use Vite **instead of** Webpack") and shares a
+named entity with an existing memory, ghost creates a `contradicts` edge (new → old,
+so force-include keeps the old fact visible) and diminishes the old memory's
+importance so the current truth ranks above it. Default OFF — existing behavior and
+the public benchmarks are untouched until this has been A/B'd on the full suite.
+`TestEvalPersonalFreshnessKnob` verifies that with the knob on, `new-bundler`
+outranks `old-bundler` (fresh-outranks-stale 0 → 1). See `internal/store/freshness.go`.
+
 ## External Benchmarks
 
 ### LongMemEval (ICLR 2025)
