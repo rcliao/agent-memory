@@ -40,7 +40,7 @@ type RuleCond struct {
 
 // RuleAction holds the action to perform when a rule matches.
 type RuleAction struct {
-	Op     string         `json:"op"`     // DECAY, DELETE, PROMOTE, DEMOTE, ARCHIVE, TTL_SET, PIN
+	Op     string         `json:"op"` // DECAY, DELETE, PROMOTE, DEMOTE, ARCHIVE, TTL_SET, PIN
 	Params map[string]any `json:"params,omitempty"`
 }
 
@@ -48,24 +48,30 @@ type RuleAction struct {
 type ReflectParams struct {
 	NS     string
 	DryRun bool
+	// Relink runs the multi-signal edge linker over the namespace (cosine OR
+	// shared entities OR topic overlap), backfilling relates_to edges for
+	// memories the cosine-only auto-linker missed. Requires NS. Idempotent
+	// (INSERT OR IGNORE). Skipped on DryRun. O(n^2) — a maintenance operation.
+	Relink bool
 }
 
 // ReflectResult summarizes what the reflect cycle did.
 type ReflectResult struct {
-	MemoriesEvaluated int      `json:"memories_evaluated"`
-	RulesApplied      int      `json:"rules_applied"`
-	Decayed           int      `json:"decayed"`
-	Promoted          int      `json:"promoted"`
-	Demoted           int      `json:"demoted"`
-	Archived          int      `json:"archived"`
-	Deleted           int      `json:"deleted"`
-	Merged            int      `json:"merged"`
-	Linked            int              `json:"linked,omitempty"`
-	LinkedClusters    []MemoryCluster  `json:"linked_clusters,omitempty"`
-	AutoConsolidated  int              `json:"auto_consolidated,omitempty"`
-	EdgesDecayed      int              `json:"edges_decayed,omitempty"`
-	EdgesPruned       int              `json:"edges_pruned,omitempty"`
-	Errors            []string `json:"errors,omitempty"`
+	MemoriesEvaluated int             `json:"memories_evaluated"`
+	RulesApplied      int             `json:"rules_applied"`
+	Decayed           int             `json:"decayed"`
+	Promoted          int             `json:"promoted"`
+	Demoted           int             `json:"demoted"`
+	Archived          int             `json:"archived"`
+	Deleted           int             `json:"deleted"`
+	Merged            int             `json:"merged"`
+	Linked            int             `json:"linked,omitempty"`
+	LinkedClusters    []MemoryCluster `json:"linked_clusters,omitempty"`
+	AutoConsolidated  int             `json:"auto_consolidated,omitempty"`
+	EdgesDecayed      int             `json:"edges_decayed,omitempty"`
+	EdgesPruned       int             `json:"edges_pruned,omitempty"`
+	Relinked          int             `json:"relinked,omitempty"`
+	Errors            []string        `json:"errors,omitempty"`
 }
 
 // Valid action operations.
@@ -381,6 +387,18 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 	// Edges not accessed in 30+ days with <3 accesses decay; weight <0.05 → deleted.
 	if !p.DryRun {
 		s.decayEdges(ctx, result)
+	}
+
+	// Optional: backfill the associative graph with the multi-signal linker.
+	// Explicit/opt-in, so it runs even though the default auto-linker is cosine-only.
+	if p.Relink && !p.DryRun {
+		if p.NS == "" {
+			result.Errors = append(result.Errors, "relink requires a namespace (--ns)")
+		} else if n, err := s.BenchBuildEdges(ctx, p.NS); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("relink: %v", err))
+		} else {
+			result.Relinked = n
+		}
 	}
 
 	return result, nil

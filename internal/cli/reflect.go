@@ -12,6 +12,7 @@ func init() {
 	RootCmd.AddCommand(reflectCmd)
 	reflectCmd.Flags().String("ns", "", "Namespace filter")
 	reflectCmd.Flags().Bool("dry-run", false, "Show what would happen without applying changes")
+	reflectCmd.Flags().Bool("relink", false, "Backfill relates_to edges via the multi-signal linker (cosine OR shared entities OR topics); requires --ns. Idempotent; O(n^2), a maintenance op")
 
 	RootCmd.AddCommand(ruleCmd)
 	ruleCmd.AddCommand(ruleSetCmd)
@@ -44,10 +45,12 @@ var reflectCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ns, _ := cmd.Flags().GetString("ns")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		relink, _ := cmd.Flags().GetBool("relink")
 
 		result, err := st.Reflect(cmd.Context(), store.ReflectParams{
 			NS:     ns,
 			DryRun: dryRun,
+			Relink: relink,
 		})
 		if err != nil {
 			return err
@@ -67,6 +70,9 @@ var reflectCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "  Archived:           %d\n", result.Archived)
 			fmt.Fprintf(cmd.OutOrStdout(), "  Deleted:            %d\n", result.Deleted)
 			fmt.Fprintf(cmd.OutOrStdout(), "  Merged:             %d\n", result.Merged)
+			if result.Relinked > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "  Relinked edges:     %d\n", result.Relinked)
+			}
 			if len(result.Errors) > 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "  Errors:\n")
 				for _, e := range result.Errors {
