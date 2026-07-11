@@ -278,6 +278,35 @@ GHOST_PERSONAL_EVAL_OUT=/tmp/personal_eval.json go test ./internal/store/ -run T
 | freshness-update | 1 | fresh present | **0.12** | **0/1** |
 | contradiction-surfacing | 1 | both surfaced | 0.50 | — |
 | utility-recall | 1 | useful present | 0.33 | records outranks |
+| **multi-hop** (edge-only) | 1 | evidence surfaced | 1.00 | — |
+| **abstention** | 1 | nothing fabricated | — | — |
+
+The **multi-hop** slice is the LLM-free differentiator: the query shares no terms
+with the evidence, which is reachable *only* by following a `relates_to` edge
+(spreading activation — the substitute for an LLM reasoning across memories). It
+passes, directly validating the edge-densification (`reflect --relink`) work.
+**Abstention** confirms a query with no matching memory surfaces nothing rather than
+packing noise to fill budget. (Discriminative abstention — an absent answer sharing
+an incidental term with a distractor — is a vector-path property this FTS-only eval
+can't fairly measure; noted for the embedded variant.)
+
+**A/B matrix (`TestEvalPersonalABMatrix`).** Runs the whole eval under each knob
+config and prints a comparison, so the eval *measures* feature impact rather than us
+guessing:
+
+| config | pass | fresh↑ | util↑ | sameday↑ | multihop | abstain | meanMRR |
+|---|---|---|---|---|---|---|---|
+| default | 12/12 | 0 | 1 | 1 | y | y | 0.745 |
+| `GHOST_FRESHNESS=1` | 12/12 | **1** | 1 | 1 | y | y | **0.790** |
+| `GHOST_UTILITY_WEIGHT=0.6` | 12/12 | 0 | 1 | 1 | y | y | 0.731 |
+| both | 12/12 | 1 | 1 | 1 | y | y | 0.734 |
+
+**Finding:** `GHOST_FRESHNESS` is a *net win* (meanMRR 0.745 → 0.790 and it flips the
+freshness gap) — a candidate for default-on pending the public-suite regression check.
+`GHOST_UTILITY_WEIGHT` does its targeted job (useful > useless) but slightly *lowers*
+aggregate MRR because the coarse co-retrieval utility signal reshuffles unrelated
+memories — motivating the roadmap's "gate the utility increment on query-token
+overlap" follow-up before it can default on.
 
 **What the baseline reveals:** recall of preferences/procedures/decisions is strong
 even on FTS alone, and the existing `contradicts` force-include correctly surfaces a
