@@ -22,7 +22,14 @@ func rankOf(keys []string, key string) int {
 func seedPersonalStore(t *testing.T) *SQLiteStore {
 	t.Helper()
 	s := newTestStore(t)
-	ctx := context.Background()
+	seedPersonalInto(t, context.Background(), s)
+	return s
+}
+
+// seedPersonalInto seeds the personal corpus and its edges into an existing
+// store (so callers can set an embedder first, for the embedded-mode eval).
+func seedPersonalInto(t *testing.T, ctx context.Context, s *SQLiteStore) {
+	t.Helper()
 	if _, err := SeedStore(ctx, s, PersonalSeedCorpus()); err != nil {
 		t.Fatalf("seed personal corpus: %v", err)
 	}
@@ -43,7 +50,6 @@ func seedPersonalStore(t *testing.T) *SQLiteStore {
 	}); err != nil {
 		t.Fatalf("create relates_to edge: %v", err)
 	}
-	return s
 }
 
 // TestEvalPersonal measures personal-agent retrieval quality across preference,
