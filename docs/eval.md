@@ -309,6 +309,23 @@ useless) but slightly *lowers* aggregate MRR because the co-retrieval utility si
 was coarse — since fixed to credit only direct query hits (`internal/store/edge.go`);
 it remains opt-in pending a re-measure.
 
+**Embedded variant (`TestEvalPersonalEmbedded`, gated behind `GHOST_PERSONAL_EMBED=1`).**
+The FTS-only eval can't test the semantic path — queries with no term overlap to their
+evidence. This variant loads the local embedder and runs semantic-recall scenarios
+(query shares zero tokens with the target) FTS-only vs with-vectors:
+
+| scenario | query → target | FTS-MRR | vec-MRR |
+|---|---|---|---|
+| indent-go | "indent my Golang source" → "format Go code, tabs" | 0.00 | 1.00 |
+| datastore | "which datastore did we choose" → "…Postgres database…" | 0.00 | 1.00 |
+| ship-release | "ship a release to production" → "deploy the service…" | 0.00 | 0.25 |
+| editor | "what do I write my code in" → "My editor is Neovim…" | 0.00 | 0.00 |
+| **MEAN** | | **0.000** | **0.562** |
+
+Vectors lift semantic recall from 0 to 0.562 — and the eval surfaces a remaining
+gap (`editor`) the embedding model doesn't bridge. Run:
+`GHOST_PERSONAL_EMBED=1 GHOST_EMBED_PROVIDER=local go test ./internal/store/ -run TestEvalPersonalEmbedded -v`
+
 **What the baseline reveals:** recall of preferences/procedures/decisions is strong
 even on FTS alone, and the existing `contradicts` force-include correctly surfaces a
 contradicted fact when the edge exists. The open gap is **freshness-update**: the
