@@ -72,10 +72,11 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
   eval slice + knob test added. Also fixed a pre-existing nondeterministic context tie-break (now
   breaks ties by priority then key). Remaining: search.go re-sort blend + tighten the co-retrieval
   increment (edge.go:493) from +1-for-all to token-overlap-gated.
-- **Q3. Storage compaction** — S, high. `ghost gc --prune-superseded` +
-  `--purge-deleted <age>` + `VACUUM`. Reclaims ~1,656 rows / 1,667 chunks on the live
-  DB. Dry-run first, opt-in. Retrieval already joins `MAX(version)` so answers are
-  unaffected. `internal/store/sqlite_gc.go`, `internal/cli/gc.go`.
+- **Q3. Storage compaction** — ✅ **Shipped (2026-07-11).** `ghost gc --purge-deleted <age|all>
+  [--vacuum]` hard-removes soft-deleted memories + their orphaned chunks/edges/links/files, then
+  optionally VACUUMs. Dry-run supported; live memories never touched (retrieval joins MAX(version)).
+  Concrete-store method (no Store-interface change). On the live DB copy: **249MB → 164MB** (2,117
+  rows + 15,096 chunks reclaimed). `internal/store/sqlite_gc.go`, `internal/cli/gc.go`.
 - **Q4. Dedup threshold reconcile + `date:` tag on write** — S, med. Fix 0.82-in-code
   vs 0.92-in-help mismatch, expose `GHOST_DEDUP_THRESHOLD`; auto-stamp
   `date:YYYY-MM-DD` at write to activate the dead `SessionScope` tag half.

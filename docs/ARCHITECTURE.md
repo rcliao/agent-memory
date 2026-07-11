@@ -335,7 +335,7 @@ The public `Store` interface is a subset of the internal one — core CRUD, sear
 | `tags` | List, rename, or remove tags |
 | `ns` | Namespace operations (list, rm) |
 | `reflect` | Run lifecycle rules |
-| `gc` | Garbage collect expired/stale memories |
+| `gc` | Garbage collect expired/stale memories; `--purge-deleted <age|all>` hard-removes soft-deleted rows + orphaned chunks; `--vacuum` reclaims disk |
 | `stats` | Database statistics |
 | `export` / `import` | JSON export/import |
 | `ingest` | Parse markdown files into memories |
