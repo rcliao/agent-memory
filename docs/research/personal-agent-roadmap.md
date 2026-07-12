@@ -166,3 +166,44 @@ Legend: effort S/M/L/XL · impact low/med/high/transformative · all **LLM-free*
 4. Dedup threshold: 0.92 (fewer false merges) vs 0.82 (more aggressive)?
 5. One-time supervised compaction + relink backfill over the live DB (backed up), or
    forward-only on new data?
+
+---
+
+# Phase 2 — validated next iteration (2026-07-11)
+
+Phase 1 built the LLM-free personal-memory substrate. Phase 2 was pressure-tested against
+code + SOTA (workflow `wxvijqxfh`); **all four levers came back CONDITIONAL**. Decisions:
+optimize for **both benchmark + live in sequence**, and stay **pure-Go only** (no CGo/ORT,
+no vendored forks).
+
+## Sequence
+
+1. **B1 · same-day recall — GO.** Root cause: shell `LogExchange` writes every turn as
+   `tier=sensory / importance 0.3`, and sensory is excluded from default search — the fact
+   just stated is invisible to the next recall query. Pure-shell fix (reuse Phase-1 capture
+   heuristics to emit a distilled higher-tier fact for salient turns; keep chatter at sensory).
+   No ghost change, no schema, zero benchmark risk. Bundle **B4** (extend heartbeat
+   `RunReflect` to also call `relink`/`mine-procedures`/`gc --purge-deleted`). Measure: shell
+   grounded-recall rate over time.
+2. **PPR edge-provenance ablation.** Before building PPR, test on the in-house multi-hop slice
+   with entity/topic edges only vs cosine-only. Live graph is 29,042/29,138 cosine edges, so
+   PPR may just echo dense retrieval. If cosine echoes dominate the lift → **PPR is NO-GO**,
+   widen/selective rerank instead. (Reranker logit-diagnostic dropped — its fix needed ORT/fork,
+   which pure-Go-only rules out.)
+3. **Commit to the winner.** PPR behind `GHOST_PPR` (pure-Go power iteration, off by default) if
+   the ablation shows entity-bridge edges carry it; otherwise pure-Go **selective reranking**
+   (recalibrate `GHOST_RERANK_ADAPTIVE` so only low-confidence queries pay the ~18s cost).
+4. **Bi-temporal validity** behind `GHOST_BITEMPORAL` — additive `valid_from/valid_to` (approved
+   ALTER), point-in-time "as of" recall, hard-retire superseded facts (gated; false supersede
+   risks Omission). Justify on the personal-agent capability, not HaluMem (n=17, saturated).
+   Regression gate: LongMemEval_S R@5 0.908 / MRR 0.827 (this is a Search-path change).
+5. **B3 feedback loop.** Grounded-recall → utility bump. Needs first: gate the existing
+   direct-hit auto-bump (edge.go) to avoid double-count, and thread memory identity
+   (`ContextMemory.ID` or `UtilityIncByKey` — Store-interface change, needs approval).
+6. **B2 real-miss eval — DEFERRED** until grounded volume is sufficient (currently ~10 noisy misses).
+
+## Corrections this research surfaced
+- The docs' "ORT applies sigmoid" reranker story is **wrong** — hugot applies sigmoid
+  unconditionally in both backends; the real issue is float32 tail-collapse tying MaxP maxima.
+- PPR is not the slam-dunk it first appeared: a cosine-similarity graph doesn't give HippoRAG's
+  entity-bridge win, and benchmarks build edges fresh per-question (the dense live graph ≠ eval graph).
