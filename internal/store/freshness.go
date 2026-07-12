@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"regexp"
+	"time"
 
 	"github.com/rcliao/ghost/internal/entity"
 )
@@ -101,4 +102,10 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 		WHERE ns = ? AND key = ? AND deleted_at IS NULL
 		  AND version = (SELECT MAX(version) FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL)`,
 		supersedeImportanceFloor, supersedeDemoteFactor, ns, bestKey, ns, bestKey)
+
+	// Bi-temporal mode: additionally retire the old fact's event-time validity,
+	// so default retrieval stops returning it while AsOf recall still can.
+	if bitemporalEnabled() {
+		s.invalidateMemory(ns, bestKey, time.Now())
+	}
 }

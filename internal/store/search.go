@@ -28,6 +28,7 @@ type SearchParams struct {
 	ReferenceTime time.Time // if set, temporal scoring uses this instead of now()
 	After         time.Time // if set, only return memories created after this time
 	Before        time.Time // if set, only return memories created before this time
+	AsOf          time.Time // if set, point-in-time recall: only facts event-time valid at this instant (see bitemporal.go)
 	MultiQuery    bool      // if true, decompose query into sub-queries for multi-hop retrieval
 	ExpandEdges   bool      // if true, expand results via 1-hop graph edges for multi-hop retrieval
 	PRF           bool      // if true, run pseudo-relevance feedback (re-query with expanded terms)
@@ -638,7 +639,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	//
 	// Note: empirically PRF adds noise on LoCoMo (regressed -7% MRR) when top-3
 	// seeds are unreliable. Prefer MMR diversification for multi-hop.
-	if p.PRF && len(results) >= 3 {
+	if (p.PRF || envBool("GHOST_PRF")) && len(results) >= 3 {
 		results = s.pseudoRelevanceFeedback(ctx, p, results, limit)
 	}
 
@@ -646,7 +647,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	// Note: empirically MMR hurts LoCoMo retrieval (-42% MRR) because it
 	// reorders the full list and pushes relevant near-duplicates far down.
 	// Kept behind flag as experimental infrastructure for future refinement.
-	if p.MMR && len(results) > 1 && s.embedder != nil {
+	if (p.MMR || envBool("GHOST_SEARCH_MMR")) && len(results) > 1 && s.embedder != nil {
 		results = s.mmrDiversify(ctx, p.Query, results)
 	}
 
@@ -1431,6 +1432,7 @@ func (s *SQLiteStore) searchFTS(ctx context.Context, p SearchParams, limit int) 
 		args = append(args, tier)
 	}
 	where, args = appendDateFilter(where, args, p)
+	where, args = appendValidityFilter(where, args, p)
 
 	// Boost recency weight when query has temporal intent
 	recencyWeight := 0.3
@@ -1525,6 +1527,10 @@ func (s *SQLiteStore) searchVector(ctx context.Context, p SearchParams, exclude 
 	if !p.Before.IsZero() {
 		where += " AND m.created_at <= ?"
 		args = append(args, p.Before.UTC().Format(time.RFC3339))
+	}
+	if vw, vargs := appendValidityFilter(nil, nil, p); len(vw) > 0 {
+		where += " AND " + strings.Join(vw, " AND ")
+		args = append(args, vargs...)
 	}
 
 	query := fmt.Sprintf(`
@@ -1697,6 +1703,7 @@ func (s *SQLiteStore) searchLike(ctx context.Context, p SearchParams, baseWhere 
 		args = append(args, tier)
 	}
 	where, args = appendDateFilter(where, args, p)
+	where, args = appendValidityFilter(where, args, p)
 	_ = baseWhere // we rebuild where clauses here
 
 	// Build per-term LIKE clauses joined with OR for better recall.

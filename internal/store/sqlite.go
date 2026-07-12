@@ -214,6 +214,12 @@ func (s *SQLiteStore) migrate() error {
 	// keep neutral decay until reflect recomputes ease from their utility.
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN ease REAL NOT NULL DEFAULT 1.0`)
 
+	// Phase 9: bi-temporal event-time validity (see bitemporal.go). NULLs mean
+	// "valid since created_at, still valid" — existing rows are unaffected and
+	// the columns stay inert unless GHOST_BITEMPORAL=1 stamps them.
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN valid_from TEXT`)
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN valid_to TEXT`)
+
 	// Phase 5: similarity condition for reflect rules
 	s.db.Exec(`ALTER TABLE reflect_rules ADD COLUMN cond_similarity_gt REAL`)
 

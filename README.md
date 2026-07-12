@@ -180,7 +180,7 @@ Memories are connected by weighted, typed edges for associative retrieval:
 | `contains` | 0.6 | Parent summary → child detail (children suppressed) |
 | `merged_into` | 0.0 | Audit trail only |
 
-Edges are auto-created on `put` when embedding similarity exceeds threshold (default 0.80, configurable via `GHOST_EDGE_THRESHOLD`). Edges strengthen through co-retrieval (Hebbian learning) and decay when unused.
+Edges are auto-created on `put` when embedding similarity exceeds threshold (default 0.85, configurable via `GHOST_EDGE_THRESHOLD`). Edges strengthen through co-retrieval (Hebbian learning) and decay when unused.
 
 ```bash
 # Manual edge creation
@@ -228,7 +228,13 @@ All defaults are sensible; these tune the personalization and retrieval behavior
 | `GHOST_UTILITY_WEIGHT` | `0` (off) | Blend proven usefulness (`utility_count/access_count`) into context ranking. |
 | `GHOST_EDGE_THRESHOLD` | `0.85` | Cosine threshold for auto-linking edges on `put`. |
 | `GHOST_RELINK_MAX` | `8` | Max edges per memory kept by `reflect --relink` (0 = uncapped). |
-| `GHOST_PPR` | `0` (off) | Personalized-PageRank multi-hop context expansion (pure-Go) instead of single-hop — reaches 2–3 hops and rewards multi-path convergence. Tune with `GHOST_PPR_ALPHA` (restart, 0.5) / `GHOST_PPR_ITERS` (20). |
+| `GHOST_PPR` | `0` (off) | Personalized-PageRank multi-hop context expansion (pure-Go) instead of single-hop — reaches 2–3 hops and rewards multi-path convergence. Tune with `GHOST_PPR_ALPHA` (restart, 0.5) / `GHOST_PPR_ITERS` (20). Measured on LongMemEval_S context-mode: regresses R@5 (0.502→0.399) — off for good reason; only worth trying on graphs rich in curated entity/topic edges. |
+| `GHOST_BITEMPORAL` | `0` (off) | Bi-temporal validity: supersede detection also stamps `valid_to` on the replaced fact, default search hard-retires invalidated facts, and `AsOf` recall reconstructs past belief states. |
+| `GHOST_MIN_SCORE` | `0` (off) | Context confidence floor for callers that don't set one — drops low-score candidates instead of returning confident-looking noise for absent topics. `0.3` measured regression-free; recommended for deployments. |
+| `GHOST_MMR_LAMBDA` | `0` (off) | MMR diversity re-rank of context candidates (token-Jaccard, works FTS-only). Measured: regresses LongMemEval (relevant near-dup chunks get demoted); only worth trying on redundancy-heavy personal DBs. |
+| `GHOST_ACTR` | `0` (off) | ACT-R base-level activation replaces the recency+frequency scoring terms (τ/s via `GHOST_ACTR_TAU`/`GHOST_ACTR_S`). Prototype: measured below baseline on the personal eval; needs a per-access log to shine. |
+| `GHOST_PRF` | `0` (off) | RM3 pseudo-relevance feedback: expand the query with terms shared by top-3 hits and re-search. Measured flat-to-negative on current suites. |
+| `GHOST_SEARCH_MMR` | `0` (off) | Embedding-based MMR diversification of search results (requires embedder). Measured −42% MRR on LoCoMo — experimental only. |
 | `GHOST_EMBED_PROVIDER` | `local` | Embedding backend: `local` (all-MiniLM, pure Go), `ollama`, `openai`, or `none`. |
 | `GHOST_RERANKER` | off | `local` enables the cross-encoder reranker (ms-marco-MiniLM). |
 | `GHOST_DB` | `~/.ghost/memory.db` | Database path. |
