@@ -36,14 +36,18 @@ Ghost is a persistent memory system for AI agents. Single binary, SQLite-backed,
 | Package | Purpose | Size |
 |---------|---------|------|
 | `cmd/ghost` | Entrypoint — delegates to `cli.RootCmd.Execute()` | 13 LOC |
-| `internal/cli` | Cobra commands for all CLI subcommands | ~1900 src / ~2400 test |
-| `internal/store` | `Store` interface + `SQLiteStore` implementation | ~4400 src / ~3700 test |
-| `internal/model` | Core data types: `Memory`, `Chunk`, `FileRef` | 68 LOC |
+| `internal/cli` | Cobra commands for all CLI subcommands | ~3400 LOC |
+| `internal/store` | `Store` interface + `SQLiteStore` — CRUD, search, context assembly, edges, reflect lifecycle, freshness, GC, eval | ~13,500 LOC |
+| `internal/capture` | LLM-free memory extraction: regex intent classifiers + entity salience → candidates | ~440 LOC |
+| `internal/procedure` | Frequent-sequence workflow miner (procedural induction) | ~141 LOC |
+| `internal/entity` | Rule-based NER + TF-IDF topic extraction (used by capture, auto-linking, relink) | ~399 LOC |
+| `internal/embedding` | Pluggable embeddings (local all-MiniLM / Ollama / OpenAI) + local cross-encoder reranker | ~880 LOC |
 | `internal/chunker` | Markdown-aware text splitting (~400 char targets) | 193 LOC |
-| `internal/embedding` | Pluggable vector embeddings (local/Ollama/OpenAI) | ~320 LOC |
 | `internal/ingest` | Markdown file parser (H2 → sections → memories) | 154 LOC |
-| `internal/mcpserver` | MCP server over stdio (10 tools: put, get, search, context, expand, consolidate, curate, reflect, edge, edge_candidates) | ~520 LOC |
-| `memory.go` | Public library API — re-exports from internal packages | 102 LOC |
+| `internal/mcpserver` | MCP server over stdio (10 tools: put, get, search, context, expand, consolidate, curate, reflect, edge, edge_candidates) | ~556 LOC |
+| `internal/dash` | Terminal dashboard for inspecting memory state | ~387 LOC |
+| `internal/model` | Core data types: `Memory`, `Chunk`, `FileRef` | 69 LOC |
+| `memory.go` | Public library API — re-exports from internal packages | ~102 LOC |
 
 ## Data Model
 
@@ -66,7 +70,8 @@ Memory {
   Supersedes     string      // ID of previous version
   Tags           []string    // first-class filtering (identity, lore, project:ghost, chat:123)
   AccessCount    int         // incremented on every retrieval
-  UtilityCount   int         // incremented when memory was actually useful
+  UtilityCount   int         // incremented when directly useful (query-hit, not edge passenger)
+  Ease           float64     // spaced-repetition decay resistance (1.0 neutral; grows with utility)
   EstTokens      int         // rough token estimate (len/4 + 20)
   TTL/ExpiresAt              // optional expiration
 }
