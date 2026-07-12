@@ -324,7 +324,7 @@ func SeedStore(ctx context.Context, s *SQLiteStore, corpus []SeedMemory) (map[st
 
 		// Apply raw SQL overrides for reflect trigger setup
 		if sm.BackdateHours > 0 {
-			backdated := time.Now().Add(-time.Duration(sm.BackdateHours) * time.Hour).UTC().Format(time.RFC3339)
+			backdated := s.now().Add(-time.Duration(sm.BackdateHours) * time.Hour).UTC().Format(time.RFC3339)
 			if _, err := s.db.ExecContext(ctx,
 				`UPDATE memories SET created_at = ? WHERE id = ?`, backdated, mem.ID); err != nil {
 				return nil, fmt.Errorf("backdate %s: %w", sm.Key, err)

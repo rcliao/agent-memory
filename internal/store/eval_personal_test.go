@@ -30,6 +30,7 @@ func seedPersonalStore(t *testing.T) *SQLiteStore {
 // store (so callers can set an embedder first, for the embedded-mode eval).
 func seedPersonalInto(t *testing.T, ctx context.Context, s *SQLiteStore) {
 	t.Helper()
+	freezeEvalClock(s) // deterministic wrt wall clock — see evalClockEpoch
 	if _, err := SeedStore(ctx, s, PersonalSeedCorpus()); err != nil {
 		t.Fatalf("seed personal corpus: %v", err)
 	}

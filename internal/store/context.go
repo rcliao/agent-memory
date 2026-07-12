@@ -176,7 +176,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	//   Episodic (events): recency dominates — time-bound observations
 	//   Semantic (facts): relevance + importance — timeless knowledge
 	//   Procedural (skills): access frequency — strengthened by practice (testing effect)
-	now := time.Now()
+	now := s.now()
 
 	// scoreMap tracks scores by memory ID for edge boost merging
 	scoreMap := map[string]*contextCandidate{}
@@ -228,6 +228,12 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	// Confidence filter: drop low-score candidates and detect "flat noise"
 	// (top-1 too close to the tail — retrieval couldn't discriminate).
 	// Both filters are opt-in via zero defaults.
+	// Env-default confidence floor: callers that don't set MinScore inherit
+	// GHOST_MIN_SCORE (default 0 = off), so the false-confidence guard can be
+	// enabled fleet-wide without changing every call site.
+	if p.MinScore == 0 {
+		p.MinScore = envFloatDefault("GHOST_MIN_SCORE", 0)
+	}
 	if len(candidates) > 0 && (p.MinScore > 0 || p.MinSpread > 0) {
 		if p.MinScore > 0 {
 			keep := candidates[:0]
@@ -250,6 +256,13 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 				candidates = candidates[:1]
 			}
 		}
+	}
+
+	// MMR diversity re-rank (opt-in via GHOST_MMR_LAMBDA): demote candidates
+	// textually redundant with higher-ranked ones so near-duplicates don't
+	// crowd the packing budget.
+	if lambda := mmrLambda(); lambda > 0 {
+		candidates = mmrRerank(candidates, lambda)
 	}
 
 	// Build containment map before packing: for each candidate, find if it's
@@ -540,7 +553,7 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 
 // countActiveMemories returns the number of non-deleted, non-expired memories in a namespace.
 func (s *SQLiteStore) countActiveMemories(ctx context.Context, ns string) (int, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	var count int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM memories
@@ -582,6 +595,13 @@ func computeContextScore(m model.Memory, similarity float64, now time.Time, scop
 	w := kindWeights(m.Kind)
 	base := relevance*w.relevance + recency*w.recency + importance*w.importance + accessFreq*w.access
 
+	// Opt-in ACT-R mode (GHOST_ACTR=1): one activation scalar subsumes the
+	// separate recency and access-frequency heuristics (see actr.go).
+	if actrEnabled() {
+		base = relevance*w.relevance + importance*w.importance +
+			actrActivation(m, now)*(w.recency+w.access)
+	}
+
 	// Opt-in utility term: reward memories that proved useful (co-retrieved) to
 	// THIS user. utility_count is captured but unused by default; GHOST_UTILITY_WEIGHT
 	// turns it into ranking lift. Additive so accessFreq stays intact. Default 0.
@@ -619,7 +639,7 @@ func utilityRatio(m model.Memory) float64 {
 
 // loadPinnedMemories loads memories with pinned=1, ordered by importance.
 func (s *SQLiteStore) loadPinnedMemories(ctx context.Context, ns string) ([]model.Memory, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	where := "m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?) AND m.pinned = 1"
 	args := []interface{}{now}

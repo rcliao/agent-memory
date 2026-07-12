@@ -194,7 +194,7 @@ var builtinRules = []ReflectRule{
 
 // seedBuiltinRules inserts built-in rules if they don't already exist.
 func (s *SQLiteStore) seedBuiltinRules() {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	for _, r := range builtinRules {
 		paramsJSON, _ := json.Marshal(r.Action.Params)
 		s.db.Exec(`INSERT OR IGNORE INTO reflect_rules
@@ -224,7 +224,7 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 	}
 
 	// Load candidate memories
-	now := time.Now().UTC()
+	now := s.now().UTC()
 	nowStr := now.Format(time.RFC3339)
 	where := []string{"m.deleted_at IS NULL", "(m.expires_at IS NULL OR m.expires_at > ?)"}
 	args := []interface{}{nowStr}
@@ -623,7 +623,7 @@ func (s *SQLiteStore) applyTTLSet(ctx context.Context, id string, params map[str
 	if err != nil {
 		return fmt.Errorf("TTL_SET: %w", err)
 	}
-	exp := time.Now().UTC().Add(d).Format(time.RFC3339)
+	exp := s.now().UTC().Add(d).Format(time.RFC3339)
 	_, err = s.db.ExecContext(ctx,
 		`UPDATE memories SET expires_at = ? WHERE id = ? AND deleted_at IS NULL`, exp, id)
 	return err

@@ -207,3 +207,53 @@ no vendored forks).
   unconditionally in both backends; the real issue is float32 tail-collapse tying MaxP maxima.
 - PPR is not the slam-dunk it first appeared: a cosine-similarity graph doesn't give HippoRAG's
   entity-bridge win, and benchmarks build edges fresh per-question (the dense live graph ≠ eval graph).
+
+---
+
+# Phase 2 — measured results (2026-07-12)
+
+Eval-first pass over the Phase-2 levers plus SOTA-informed candidates (Zep/Graphiti
+bi-temporal, Zep MMR rerankers, RM3 PRF, ACT-R activation). Method: baseline →
+change → A/B on personal eval + in-repo suites + LongMemEval_S; anything that
+regresses stays opt-in with the measured verdict documented at the knob.
+
+## Verdicts
+
+| Lever | Verdict | Evidence |
+|---|---|---|
+| **PPR default-on** | **NO-GO** — stays behind `GHOST_PPR` | LongMemEval_S context+edges: R@5 0.502→0.399, R@10 0.535→0.431 (MRR flat 0.502→0.507). Personal multi-hop slice 1.00→0.50. Diffused mass displaces direct hits; the sharp 1-hop edge boost wins. |
+| **Context-packing MMR** (`GHOST_MMR_LAMBDA`, new) | **NO-GO default**, ships opt-in | In-repo suites unchanged; LongMemEval_S context-mode λ=0.7: MRR 0.502→0.472, R@5 0.502→0.380. Evidence = windowed chunks of the same session; diversity demotes relevant near-dups (same failure as search-path MMR −42% LoCoMo). |
+| **Bi-temporal validity** (`GHOST_BITEMPORAL`, shipped) | **Capability landed**, off by default | Additive `valid_from`/`valid_to` (approved ALTER); supersede stamps `valid_to`; Search hard-retires invalidated facts; `SearchParams.AsOf` gives point-in-time recall. Zero regression (full suite + personal eval byte-identical flag-off). Doesn't move freshness-update MRR (0.14): that slice's rank is pinned-ordering-dominated, and `contradicts` force-include (transparency, by design) resurfaces the old fact in Context. |
+| **ACT-R activation** (`GHOST_ACTR`, new prototype) | **NO-GO default** | Personal eval regresses under every swept config (best 0.734/0.750 vs 0.790/0.833 baseline; τ∈{-3..0}, s∈{1,2}). Three-point approximation (count, created, last-access) is the weak link — revisit only with a per-access log. |
+| **RM3 PRF** (existing, now env-gated `GHOST_PRF`) | **Mixed — recall-leaning tradeoff, stays opt-in** | LongMemEval_S search-mode paired 150q: R@5 0.894→**0.917** (+2.3pt) but MRR 0.822→0.786 (−3.6pt), R@10 flat. PRF pulls extra relevant sessions into top-5 while shuffling the best hit off rank 1 — and costs ~10× per query (re-runs full hybrid search). Worth revisiting if a downstream reranker can restore rank-1; not a default. |
+
+**Branch regression gate (flags off): PASS** — LongMemEval_S search-mode with all
+Phase-2 code merged and every knob at default reproduces the headline exactly:
+R@5 0.9083 / MRR 0.8277 / R@50 0.9968 (470q, embed cache).
+| **Utility weight re-measure** (post co-retrieval fix) | **Neutral now** (was negative) | w=0.1: meanMRR 0.790 = baseline (pre-fix: 0.745→0.731 regression). w≥0.2 regresses. Stays opt-in; the stale "lowers aggregate MRR" note is superseded. |
+| **MinScore env default** (`GHOST_MIN_SCORE`, new) | **Recommend 0.3 in deployments** | 0.2–0.3: zero regression on personal eval + full suite; guards Context false-confidence. Search-path absent-query leak (3/5) is untouched — separate lever. |
+
+## New eval-infrastructure findings
+- **In-repo evals were wall-clock sensitive — FIXED (same branch)**: seed recency decay
+  flipped ranks near ties, so the same suite gave different MRR/recall at different times
+  of day (observed multi_hop_recall 0.583 vs 0.292 90 minutes apart). Fix: injectable
+  store clock (`SQLiteStore.SetClock`) threaded through retrieval scoring, write
+  timestamps, reflect, and edge paths; eval harnesses freeze it at `evalClockEpoch`
+  (2026-03-15T12:00Z). `TestEvalClockInvariance` guards it (same corpus under clocks 6h
+  apart must rank identically). The invariance test also exposed a second bug: **Search's
+  RRF fusion had no deterministic tie-break** past CreatedAt (seeds with equal
+  BackdateHours tie exactly), so equal-scored results fell back to Go map-iteration
+  order — fixed with the same priority→key tie-break Context uses. Canonical frozen-clock
+  baselines: personal meanMRR 0.790 / R@5 0.833; report multi_hop_recall 0.208,
+  semantic 0.625, adversarial 0.667, temporal 0.667. LongMemEval_S gate re-verified
+  after the refactor: R@5 0.9083 / MRR 0.8277, unchanged.
+- **`TestEvalMultiHop` cannot measure graph features** — `eval_seed.go` creates no edges,
+  so PPR/edge changes are invisible to it. Use the personal eval's `RequiresEdge`
+  scenarios or LongMemEval with `GHOST_BENCH_EXPAND_EDGES=1`.
+- Context-mode LongMemEval (R@5 ~0.50) is not comparable to search-mode (0.908): pinned
+  phase + budget packing change what's countable. Compare within a mode only.
+
+## Doc drift fixed
+- README auto-link threshold 0.80 → 0.85 (matches `edge.go` default).
+- eval.md PRUNE row: "10 accesses, 1 utility → soft-deleted" → "20+ accesses,
+  utility < 0.05 → demoted to dormant" (matches `sys-prune-low-utility`).

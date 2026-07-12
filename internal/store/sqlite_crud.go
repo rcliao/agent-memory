@@ -20,7 +20,7 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		return nil, fmt.Errorf("invalid namespace: %w", err)
 	}
 
-	now := time.Now().UTC()
+	now := s.now().UTC()
 	id := s.newID()
 
 	// Backward compat: tier=identity → ltm + pinned
@@ -255,7 +255,7 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 func (s *SQLiteStore) BenchInsert(ctx context.Context, ns, key, content string, createdAt time.Time) error {
 	now := createdAt
 	if now.IsZero() {
-		now = time.Now().UTC()
+		now = s.now().UTC()
 	}
 	id := s.newID()
 	chunkID := s.newID()
@@ -485,7 +485,7 @@ func (s *SQLiteStore) BatchBenchInsert(ctx context.Context, ns string, sessions 
 	for i, sess := range sessions {
 		now := sess.CreatedAt
 		if now.IsZero() {
-			now = time.Now().UTC()
+			now = s.now().UTC()
 		}
 		memIDs[i] = s.newID()
 
@@ -645,7 +645,7 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 	var query string
 	var args []interface{}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	if p.History {
 		// History shows all versions when the latest version is still alive.
@@ -699,7 +699,7 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 
 	// Update access tracking for the latest
 	if !p.History {
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := s.now().UTC().Format(time.RFC3339)
 		s.db.ExecContext(ctx,
 			`UPDATE memories SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?`,
 			now, memories[0].ID)
@@ -754,7 +754,7 @@ func (s *SQLiteStore) List(ctx context.Context, p ListParams) ([]model.Memory, e
 	}
 
 	// Build a query that returns only the latest version of each ns+key
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	where := []string{"m.deleted_at IS NULL", "(m.expires_at IS NULL OR m.expires_at > ?)"}
 	args := []interface{}{now}
 
@@ -841,7 +841,7 @@ func (s *SQLiteStore) Rm(ctx context.Context, p RmParams) error {
 		return err
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	if p.AllVersions {
 		_, err := s.db.ExecContext(ctx,
 			`UPDATE memories SET deleted_at = ? WHERE ns = ? AND key = ? AND deleted_at IS NULL`,
@@ -907,7 +907,7 @@ func (s *SQLiteStore) RmNamespace(ctx context.Context, ns string, hard bool) (in
 	}
 
 	// Soft delete
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	allArgs := append([]interface{}{now}, args...)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE memories SET deleted_at = ? WHERE deleted_at IS NULL AND `+clause, allArgs...)
@@ -920,7 +920,7 @@ func (s *SQLiteStore) RmNamespace(ctx context.Context, ns string, hard bool) (in
 // findSimilarForDedup checks if a semantically similar memory already exists.
 // Returns the key of the most similar memory above the threshold, or empty string.
 func (s *SQLiteStore) findSimilarForDedup(ctx context.Context, ns string, vec embedding.Vector, threshold float64) string {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	// Load embeddings from recent memories in the same namespace
 	rows, err := s.db.QueryContext(ctx,

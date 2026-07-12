@@ -28,7 +28,23 @@ type SQLiteStore struct {
 	entropy  *rand.Rand
 	embedder embedding.Embedder
 	reranker embedding.Reranker
+	nowFn    func() time.Time // injectable clock; nil means time.Now
 }
+
+// now is the store's clock. Retrieval scoring, write timestamps, and lifecycle
+// decisions all read time through it so tests and evals can freeze the clock
+// (see SetClock) — without this, rank ties near decay boundaries flip with the
+// wall clock and the same eval gives different scores at different times of day.
+func (s *SQLiteStore) now() time.Time {
+	if s.nowFn != nil {
+		return s.nowFn()
+	}
+	return time.Now()
+}
+
+// SetClock overrides the store's time source. Pass nil to restore time.Now.
+// Intended for tests/evals; production callers should leave it unset.
+func (s *SQLiteStore) SetClock(fn func() time.Time) { s.nowFn = fn }
 
 // NewSQLiteStore opens or creates a SQLite database at the given path.
 func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
@@ -213,6 +229,12 @@ func (s *SQLiteStore) migrate() error {
 	// stretches longer before demotion. Default 1.0 (neutral); existing rows
 	// keep neutral decay until reflect recomputes ease from their utility.
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN ease REAL NOT NULL DEFAULT 1.0`)
+
+	// Phase 9: bi-temporal event-time validity (see bitemporal.go). NULLs mean
+	// "valid since created_at, still valid" — existing rows are unaffected and
+	// the columns stay inert unless GHOST_BITEMPORAL=1 stamps them.
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN valid_from TEXT`)
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN valid_to TEXT`)
 
 	// Phase 5: similarity condition for reflect rules
 	s.db.Exec(`ALTER TABLE reflect_rules ADD COLUMN cond_similarity_gt REAL`)

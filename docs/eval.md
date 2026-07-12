@@ -108,7 +108,7 @@ Queries about what the system does NOT use:
 Tests the utility feedback loop:
 
 - **Utility boost**: Call `UtilityInc` 10 times on a memory, verify it ranks higher in subsequent `Context()` calls
-- **Low utility pruning**: Memory with 10 accesses but 1 utility (ratio 0.1) gets pruned by reflect
+- **Low utility pruning**: Memory with 20+ accesses but utility ratio < 0.05 gets demoted to dormant by reflect
 
 ### TestEvalAccessPromotion (1 test)
 
@@ -157,7 +157,7 @@ Validates all five lifecycle rules on seeded trigger candidates:
 | DECAY | STM, 96h old, 1 access (<10 threshold) | importance * 0.95 |
 | PROMOTE | STM, 48h old, 12 accesses (>10 threshold) | tier -> ltm |
 | DEMOTE | LTM, 200h old, never accessed (>168h unaccessed) | tier -> dormant |
-| PRUNE | STM, 10 accesses, 1 utility | soft-deleted |
+| PRUNE | STM, 20+ accesses, utility < 0.05 | demoted to dormant |
 | PINNED | pinned LTM, 200h old, 0 access | unchanged |
 
 ### TestEvalScale (4 subtests)
