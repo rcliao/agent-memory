@@ -233,7 +233,7 @@ All defaults are sensible; these tune the personalization and retrieval behavior
 | `GHOST_MIN_SCORE` | `0` (off) | Context confidence floor for callers that don't set one — drops low-score candidates instead of returning confident-looking noise for absent topics. `0.3` measured regression-free; recommended for deployments. |
 | `GHOST_MMR_LAMBDA` | `0` (off) | MMR diversity re-rank of context candidates (token-Jaccard, works FTS-only). Measured: regresses LongMemEval (relevant near-dup chunks get demoted); only worth trying on redundancy-heavy personal DBs. |
 | `GHOST_ACTR` | `0` (off) | ACT-R base-level activation replaces the recency+frequency scoring terms (τ/s via `GHOST_ACTR_TAU`/`GHOST_ACTR_S`). Prototype: measured below baseline on the personal eval; needs a per-access log to shine. |
-| `GHOST_PRF` | `0` (off) | RM3 pseudo-relevance feedback: expand the query with terms shared by top-3 hits and re-search. Measured flat-to-negative on current suites. |
+| `GHOST_PRF` | `0` (off) | RM3 pseudo-relevance feedback: expand the query with terms shared by top-3 hits and re-search. Measured: +2.3pt R@5 but −3.6pt MRR on LongMemEval_S, at ~10× query cost — a recall-leaning tradeoff, not a default. |
 | `GHOST_SEARCH_MMR` | `0` (off) | Embedding-based MMR diversification of search results (requires embedder). Measured −42% MRR on LoCoMo — experimental only. |
 | `GHOST_EMBED_PROVIDER` | `local` | Embedding backend: `local` (all-MiniLM, pure Go), `ollama`, `openai`, or `none`. |
 | `GHOST_RERANKER` | off | `local` enables the cross-encoder reranker (ms-marco-MiniLM). |
