@@ -8,12 +8,27 @@ import (
 	"context"
 	"time"
 
+	"github.com/rcliao/ghost/internal/capture"
 	"github.com/rcliao/ghost/internal/model"
 	"github.com/rcliao/ghost/internal/store"
 )
 
 // Memory represents a stored memory entry.
 type Memory = model.Memory
+
+// Candidate is a memory extracted from raw text by the LLM-free capture path.
+type Candidate = capture.Candidate
+
+// CaptureOptions tune heuristic extraction.
+type CaptureOptions = capture.Options
+
+// Capture extracts memory candidates from raw text using deterministic
+// heuristics (intent classifiers + entity salience) — no LLM. Callers can store
+// the returned candidates (e.g. to make salient turns searchable) instead of
+// leaving them buried in a low, search-excluded tier.
+func Capture(text string, opts CaptureOptions) []Candidate {
+	return capture.Extract(text, opts)
+}
 
 // FileRef represents a link between a memory and a file on disk.
 type FileRef = model.FileRef
