@@ -197,7 +197,11 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	}
 
 	if edgeCfg.Enabled && len(scoreMap) > 0 {
-		s.expandEdges(ctx, scoreMap, seen, edgeCfg, now)
+		if pprEnabled() {
+			s.expandEdgesPPR(ctx, scoreMap, seen, edgeCfg, now)
+		} else {
+			s.expandEdges(ctx, scoreMap, seen, edgeCfg, now)
+		}
 	}
 
 	// Collect and sort candidates

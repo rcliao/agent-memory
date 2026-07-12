@@ -190,7 +190,7 @@ no vendored forks).
    PPR may just echo dense retrieval. If cosine echoes dominate the lift → **PPR is NO-GO**,
    widen/selective rerank instead. (Reranker logit-diagnostic dropped — its fix needed ORT/fork,
    which pure-Go-only rules out.)
-3. **Commit to the winner.** PPR behind `GHOST_PPR` (pure-Go power iteration, off by default) if
+3. **PPR — SHIPPED behind `GHOST_PPR` (2026-07-12).** Pure-Go power iteration (internal/store/ppr.go), off by default; 2-hop reach verified by test, contradicts/parent behaviors preserved, default path unchanged. Ablation cleared it (52% bridge edges). A/B on a multi-hop benchmark still pending. Original plan: PPR behind `GHOST_PPR` (pure-Go power iteration, off by default) if
    the ablation shows entity-bridge edges carry it; otherwise pure-Go **selective reranking**
    (recalibrate `GHOST_RERANK_ADAPTIVE` so only low-confidence queries pay the ~18s cost).
 4. **Bi-temporal validity** behind `GHOST_BITEMPORAL` — additive `valid_from/valid_to` (approved

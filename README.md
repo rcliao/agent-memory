@@ -228,6 +228,7 @@ All defaults are sensible; these tune the personalization and retrieval behavior
 | `GHOST_UTILITY_WEIGHT` | `0` (off) | Blend proven usefulness (`utility_count/access_count`) into context ranking. |
 | `GHOST_EDGE_THRESHOLD` | `0.85` | Cosine threshold for auto-linking edges on `put`. |
 | `GHOST_RELINK_MAX` | `8` | Max edges per memory kept by `reflect --relink` (0 = uncapped). |
+| `GHOST_PPR` | `0` (off) | Personalized-PageRank multi-hop context expansion (pure-Go) instead of single-hop — reaches 2–3 hops and rewards multi-path convergence. Tune with `GHOST_PPR_ALPHA` (restart, 0.5) / `GHOST_PPR_ITERS` (20). |
 | `GHOST_EMBED_PROVIDER` | `local` | Embedding backend: `local` (all-MiniLM, pure Go), `ollama`, `openai`, or `none`. |
 | `GHOST_RERANKER` | off | `local` enables the cross-encoder reranker (ms-marco-MiniLM). |
 | `GHOST_DB` | `~/.ghost/memory.db` | Database path. |
