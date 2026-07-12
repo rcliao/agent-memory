@@ -176,7 +176,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	//   Episodic (events): recency dominates — time-bound observations
 	//   Semantic (facts): relevance + importance — timeless knowledge
 	//   Procedural (skills): access frequency — strengthened by practice (testing effect)
-	now := time.Now()
+	now := s.now()
 
 	// scoreMap tracks scores by memory ID for edge boost merging
 	scoreMap := map[string]*contextCandidate{}
@@ -553,7 +553,7 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 
 // countActiveMemories returns the number of non-deleted, non-expired memories in a namespace.
 func (s *SQLiteStore) countActiveMemories(ctx context.Context, ns string) (int, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	var count int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM memories
@@ -639,7 +639,7 @@ func utilityRatio(m model.Memory) float64 {
 
 // loadPinnedMemories loads memories with pinned=1, ordered by importance.
 func (s *SQLiteStore) loadPinnedMemories(ctx context.Context, ns string) ([]model.Memory, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	where := "m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?) AND m.pinned = 1"
 	args := []interface{}{now}

@@ -29,7 +29,7 @@ func (s *SQLiteStore) RuleSet(ctx context.Context, rule ReflectRule) (*ReflectRu
 	if rule.CreatedBy == "" {
 		rule.CreatedBy = "user"
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	rule.CreatedAt = now
 
 	paramsJSON, _ := json.Marshal(rule.Action.Params)
@@ -67,7 +67,7 @@ func (s *SQLiteStore) RuleGet(ctx context.Context, id string) (*ReflectRule, err
 
 // RuleList returns all rules matching the given namespace, ordered by priority DESC.
 func (s *SQLiteStore) RuleList(ctx context.Context, ns string) ([]ReflectRule, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	where := []string{"(rule_expires_at IS NULL OR rule_expires_at > ?)"}
 	args := []interface{}{now}
 

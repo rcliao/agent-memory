@@ -493,7 +493,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	temporal := hasTemporalIntent(p.Query)
 	refTime := p.ReferenceTime
 	if refTime.IsZero() {
-		refTime = time.Now()
+		refTime = s.now()
 	}
 
 	// For temporal or update-intent queries, compute relative recency within
@@ -613,7 +613,16 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 		if si != sj {
 			return si > sj
 		}
-		return fused[i].result.CreatedAt.After(fused[j].result.CreatedAt)
+		// Deterministic tie-breaks (same scheme as Context): equal-scored,
+		// equal-age results must not fall back to map-iteration order.
+		if !fused[i].result.CreatedAt.Equal(fused[j].result.CreatedAt) {
+			return fused[i].result.CreatedAt.After(fused[j].result.CreatedAt)
+		}
+		pi, pj := priorityScore(fused[i].result.Priority), priorityScore(fused[j].result.Priority)
+		if pi != pj {
+			return pi > pj
+		}
+		return fused[i].result.Key < fused[j].result.Key
 	})
 
 	if len(fused) > limit {
@@ -1407,7 +1416,7 @@ func (s *SQLiteStore) searchFTS(ctx context.Context, p SearchParams, limit int) 
 		return nil
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	where := []string{"m.deleted_at IS NULL", "(m.expires_at IS NULL OR m.expires_at > ?)"}
 	args := []interface{}{now}
 
@@ -1432,7 +1441,7 @@ func (s *SQLiteStore) searchFTS(ctx context.Context, p SearchParams, limit int) 
 		args = append(args, tier)
 	}
 	where, args = appendDateFilter(where, args, p)
-	where, args = appendValidityFilter(where, args, p)
+	where, args = appendValidityFilter(where, args, p, s.now())
 
 	// Boost recency weight when query has temporal intent
 	recencyWeight := 0.3
@@ -1458,12 +1467,12 @@ func (s *SQLiteStore) searchFTS(ctx context.Context, p SearchParams, limit int) 
 		GROUP BY m.id
 		ORDER BY
 			(CASE m.priority WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'normal' THEN 2 ELSE 1 END) * 0.1
-			+ (1.0 / (1.0 + (julianday('now') - julianday(m.created_at)) / 7.0)) * %f
+			+ (1.0 / (1.0 + (julianday(?) - julianday(m.created_at)) / 7.0)) * %f
 			+ (MIN(fts.rank) * -%f)
 			DESC
 		LIMIT ?`, strings.Join(where, " AND "), recencyWeight, ftsWeight)
 
-	args = append(args, ftsQuery, limit)
+	args = append(args, ftsQuery, now, limit)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -1496,7 +1505,7 @@ func (s *SQLiteStore) searchVector(ctx context.Context, p SearchParams, exclude 
 	}
 
 	// Fetch all chunks with embeddings (filtered by ns if provided)
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	where := "m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?) AND c.embedding IS NOT NULL"
 	args := []interface{}{now}
 
@@ -1528,7 +1537,7 @@ func (s *SQLiteStore) searchVector(ctx context.Context, p SearchParams, exclude 
 		where += " AND m.created_at <= ?"
 		args = append(args, p.Before.UTC().Format(time.RFC3339))
 	}
-	if vw, vargs := appendValidityFilter(nil, nil, p); len(vw) > 0 {
+	if vw, vargs := appendValidityFilter(nil, nil, p, s.now()); len(vw) > 0 {
 		where += " AND " + strings.Join(vw, " AND ")
 		args = append(args, vargs...)
 	}
@@ -1678,7 +1687,7 @@ func scanMemoryWithExtra(row scanner, extras ...interface{}) (model.Memory, erro
 // It matches individual non-stop-word terms with OR for better recall on
 // natural language queries (e.g. "do you know who EV is" → LIKE '%EV%').
 func (s *SQLiteStore) searchLike(ctx context.Context, p SearchParams, baseWhere []string, limit int) ([]SearchResult, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	where := []string{"m.deleted_at IS NULL", "(m.expires_at IS NULL OR m.expires_at > ?)"}
 	args := []interface{}{now}
 
@@ -1703,7 +1712,7 @@ func (s *SQLiteStore) searchLike(ctx context.Context, p SearchParams, baseWhere 
 		args = append(args, tier)
 	}
 	where, args = appendDateFilter(where, args, p)
-	where, args = appendValidityFilter(where, args, p)
+	where, args = appendValidityFilter(where, args, p, s.now())
 	_ = baseWhere // we rebuild where clauses here
 
 	// Build per-term LIKE clauses joined with OR for better recall.

@@ -19,7 +19,7 @@ func (s *SQLiteStore) Peek(ctx context.Context, ns string) (*PeekResult, error) 
 
 	// Build WHERE clause for namespace filter
 	where := "deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?)"
-	args := []interface{}{time.Now().UTC().Format(time.RFC3339)}
+	args := []interface{}{s.now().UTC().Format(time.RFC3339)}
 	if ns != "" {
 		nsf := ParseNSFilter(ns)
 		clause, nsArgs := nsf.SQL("ns")
@@ -119,7 +119,7 @@ func (s *SQLiteStore) Expand(ctx context.Context, p ExpandParams) (*ExpandResult
 
 	if p.Key == "" {
 		// List all consolidation nodes in namespace
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := s.now().UTC().Format(time.RFC3339)
 		rows, err := s.db.QueryContext(ctx,
 			`SELECT m.key, m.kind, m.importance, m.est_tokens, m.content, COUNT(e.to_id) AS child_count
 			 FROM memories m

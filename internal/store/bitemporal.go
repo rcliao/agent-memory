@@ -28,13 +28,13 @@ func bitemporalEnabled() bool { return envBool("GHOST_BITEMPORAL") }
 // time recall via AsOf (which works regardless of the knob — the columns are
 // only ever written under the knob, so an unstamped DB just has NULLs and the
 // filter passes everything).
-func appendValidityFilter(where []string, args []interface{}, p SearchParams) ([]string, []interface{}) {
+func appendValidityFilter(where []string, args []interface{}, p SearchParams, now time.Time) ([]string, []interface{}) {
 	asOf := p.AsOf
 	if asOf.IsZero() {
 		if !bitemporalEnabled() {
 			return where, args
 		}
-		asOf = time.Now().UTC()
+		asOf = now.UTC()
 	}
 	ts := asOf.UTC().Format(time.RFC3339)
 	// valid_from is rarely stamped; a fact's event-time validity starts at its

@@ -23,7 +23,7 @@ type similarityMergeResult struct {
 // applySimilarityMerge runs the similarity-based merge for a single rule.
 // Returns the count of absorbed memories, linked edges, and absorbed IDs.
 func (s *SQLiteStore) applySimilarityMerge(ctx context.Context, rule ReflectRule, allMemories []model.Memory, deletedIDs map[string]bool, dryRun bool) (*similarityMergeResult, error) {
-	now := time.Now().UTC()
+	now := s.now().UTC()
 
 	// 1. Filter candidates by non-similarity conditions
 	var candidates []model.Memory
@@ -224,7 +224,7 @@ func (s *SQLiteStore) applyLinkSimilar(ctx context.Context, group []model.Memory
 		return 0, nil
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	linked := 0
 
 	for i := 0; i < len(group); i++ {
@@ -306,7 +306,7 @@ func (s *SQLiteStore) applyMerge(ctx context.Context, group []model.Memory) (int
 		tagsJSON = &s
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -375,7 +375,7 @@ func (s *SQLiteStore) applyDedup(ctx context.Context, group []model.Memory) (int
 	})
 
 	canonical := group[0]
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -685,7 +685,7 @@ func (s *SQLiteStore) autoConsolidateClusters(ctx context.Context, clusters []Me
 			ns = p.NS
 		}
 
-		summaryKey := fmt.Sprintf("auto-summary-%d", time.Now().UnixNano())
+		summaryKey := fmt.Sprintf("auto-summary-%d", s.now().UnixNano())
 
 		_, err := s.Consolidate(ctx, ConsolidateParams{
 			NS:         ns,

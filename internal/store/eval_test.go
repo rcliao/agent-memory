@@ -10,10 +10,20 @@ import (
 	"time"
 )
 
+// evalClockEpoch is the frozen instant all eval stores run at. Seeds backdate
+// relative to it and scoring reads it via the store clock, so eval results are
+// identical no matter when the suite runs. Without this, recency decay shifts
+// with the wall clock and rank ties flip between runs (observed: the same
+// suite gave multi_hop_recall 0.583 vs 0.292 ninety minutes apart).
+var evalClockEpoch = time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
+
+func freezeEvalClock(s *SQLiteStore) { s.SetClock(func() time.Time { return evalClockEpoch }) }
+
 // seedEvalStore creates a fresh store and seeds the default eval corpus.
 func seedEvalStore(t *testing.T) (*SQLiteStore, map[string]string) {
 	t.Helper()
 	s := newTestStore(t)
+	freezeEvalClock(s)
 	ctx := context.Background()
 	ids, err := SeedStore(ctx, s, DefaultSeedCorpus())
 	if err != nil {

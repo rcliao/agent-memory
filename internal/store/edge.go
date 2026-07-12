@@ -186,7 +186,7 @@ func (s *SQLiteStore) CreateEdge(ctx context.Context, p EdgeParams) (*Edge, erro
 		weight = defaultEdgeWeight(p.Rel)
 	}
 
-	now := time.Now().UTC()
+	now := s.now().UTC()
 	_, err = s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO memory_edges (from_id, to_id, rel, weight, access_count, last_accessed_at, created_at)
 		 VALUES (?, ?, ?, ?, 0, NULL, ?)`,
@@ -305,7 +305,7 @@ func (s *SQLiteStore) autoLinkEdges(ctx context.Context, memoryID, ns string, me
 	threshold := edgeAutoLinkThreshold()
 
 	// Fetch candidate embeddings from same namespace (latest versions only, non-deleted)
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT m.id, c.embedding
 		 FROM memories m
@@ -362,7 +362,7 @@ func (s *SQLiteStore) autoLinkEdges(ctx context.Context, memoryID, ns string, me
 	}
 
 	var edges []Edge
-	nowTime := time.Now().UTC()
+	nowTime := s.now().UTC()
 	for _, c := range candidates {
 		// Use similarity as weight, clamped to [0.5, 1.0]
 		weight := math.Max(0.5, c.similarity)
@@ -430,7 +430,7 @@ func (s *SQLiteStore) getContainsChildren(ctx context.Context, parentID string) 
 // decayEdges weakens edges that haven't been co-retrieved recently and prunes
 // very weak edges. Called during the reflect cycle.
 func (s *SQLiteStore) decayEdges(ctx context.Context, result *ReflectResult) {
-	now := time.Now().UTC()
+	now := s.now().UTC()
 	cutoff := now.Add(-30 * 24 * time.Hour).Format(time.RFC3339) // 30 days ago
 
 	// Decay: edges not accessed in 30+ days with <3 accesses → weight *= 0.9
@@ -475,7 +475,7 @@ func (s *SQLiteStore) strengthenCoRetrievedEdges(ctx context.Context, memoryIDs 
 		return
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	// For each pair of returned memories, strengthen any existing edge between them.
 	// We use diminishing returns: weight += 0.05 × (1 - weight) so it asymptotically approaches 1.0.
@@ -522,7 +522,7 @@ type MemoryCluster struct {
 // GetSimilarClusters finds groups of memories connected by relates_to edges
 // within a namespace. Returns clusters of 2+ memories for consolidation review.
 func (s *SQLiteStore) GetSimilarClusters(ctx context.Context, ns string) ([]MemoryCluster, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 
 	// Find all relates_to edges between active memories in the namespace
 	rows, err := s.db.QueryContext(ctx,
@@ -611,7 +611,7 @@ func (s *SQLiteStore) GetSimilarClusters(ctx context.Context, ns string) ([]Memo
 
 // loadMemoryByID loads a single non-deleted memory by its ID.
 func (s *SQLiteStore) loadMemoryByID(ctx context.Context, id string) (*model.Memory, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := s.now().UTC().Format(time.RFC3339)
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, ns, key, content, kind, tags, version, supersedes,
 		        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at,

@@ -234,11 +234,19 @@ R@5 0.9083 / MRR 0.8277 / R@50 0.9968 (470q, embed cache).
 | **MinScore env default** (`GHOST_MIN_SCORE`, new) | **Recommend 0.3 in deployments** | 0.2–0.3: zero regression on personal eval + full suite; guards Context false-confidence. Search-path absent-query leak (3/5) is untouched — separate lever. |
 
 ## New eval-infrastructure findings
-- **In-repo evals are wall-clock sensitive**: seed recency decay flips ranks near ties, so
-  the same suite gives different MRR/recall at different times of day (observed
-  multi_hop_recall 0.583 vs 0.292 90 minutes apart). Always A/B within one sitting and
-  use `-count=1`. Fix candidate: freeze `now` in eval harnesses (thread a
-  `ReferenceTime` through Context like Search already has).
+- **In-repo evals were wall-clock sensitive — FIXED (same branch)**: seed recency decay
+  flipped ranks near ties, so the same suite gave different MRR/recall at different times
+  of day (observed multi_hop_recall 0.583 vs 0.292 90 minutes apart). Fix: injectable
+  store clock (`SQLiteStore.SetClock`) threaded through retrieval scoring, write
+  timestamps, reflect, and edge paths; eval harnesses freeze it at `evalClockEpoch`
+  (2026-03-15T12:00Z). `TestEvalClockInvariance` guards it (same corpus under clocks 6h
+  apart must rank identically). The invariance test also exposed a second bug: **Search's
+  RRF fusion had no deterministic tie-break** past CreatedAt (seeds with equal
+  BackdateHours tie exactly), so equal-scored results fell back to Go map-iteration
+  order — fixed with the same priority→key tie-break Context uses. Canonical frozen-clock
+  baselines: personal meanMRR 0.790 / R@5 0.833; report multi_hop_recall 0.208,
+  semantic 0.625, adversarial 0.667, temporal 0.667. LongMemEval_S gate re-verified
+  after the refactor: R@5 0.9083 / MRR 0.8277, unchanged.
 - **`TestEvalMultiHop` cannot measure graph features** — `eval_seed.go` creates no edges,
   so PPR/edge changes are invisible to it. Use the personal eval's `RequiresEdge`
   scenarios or LongMemEval with `GHOST_BENCH_EXPAND_EDGES=1`.

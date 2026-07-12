@@ -28,7 +28,23 @@ type SQLiteStore struct {
 	entropy  *rand.Rand
 	embedder embedding.Embedder
 	reranker embedding.Reranker
+	nowFn    func() time.Time // injectable clock; nil means time.Now
 }
+
+// now is the store's clock. Retrieval scoring, write timestamps, and lifecycle
+// decisions all read time through it so tests and evals can freeze the clock
+// (see SetClock) — without this, rank ties near decay boundaries flip with the
+// wall clock and the same eval gives different scores at different times of day.
+func (s *SQLiteStore) now() time.Time {
+	if s.nowFn != nil {
+		return s.nowFn()
+	}
+	return time.Now()
+}
+
+// SetClock overrides the store's time source. Pass nil to restore time.Now.
+// Intended for tests/evals; production callers should leave it unset.
+func (s *SQLiteStore) SetClock(fn func() time.Time) { s.nowFn = fn }
 
 // NewSQLiteStore opens or creates a SQLite database at the given path.
 func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
