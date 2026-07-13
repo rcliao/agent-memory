@@ -109,5 +109,23 @@ func (s *SQLiteStore) touchMemories(ctx context.Context, ids []string) error {
 			WHERE id IN (%s) AND deleted_at IS NULL AND COALESCE(tier, 'stm') != 'sensory'`, placeholders),
 		args...,
 	)
+	if err == nil {
+		// Mirror the bump into the per-access log with the same tier exclusion.
+		rows, qerr := s.db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT id FROM memories WHERE id IN (%s)
+				AND deleted_at IS NULL AND COALESCE(tier, 'stm') != 'sensory'`, placeholders),
+			args[1:]...)
+		if qerr == nil {
+			var logIDs []string
+			for rows.Next() {
+				var id string
+				if rows.Scan(&id) == nil {
+					logIDs = append(logIDs, id)
+				}
+			}
+			rows.Close()
+			s.logAccesses(ctx, logIDs)
+		}
+	}
 	return err
 }

@@ -271,6 +271,10 @@ func (s *SQLiteStore) GC(ctx context.Context) (GCResult, error) {
 		return result, err
 	}
 
+	// Prune the per-access log (retention, per-memory cap, orphans).
+	// Best-effort: GC of expired memories must not fail on log maintenance.
+	_, _ = s.pruneAccessLog(ctx)
+
 	return result, nil
 }
 

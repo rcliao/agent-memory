@@ -703,6 +703,7 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 		s.db.ExecContext(ctx,
 			`UPDATE memories SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?`,
 			now, memories[0].ID)
+		s.logAccesses(ctx, []string{memories[0].ID})
 	}
 
 	// Load file references
