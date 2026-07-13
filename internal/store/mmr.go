@@ -132,3 +132,15 @@ func ftsCandidateCap() int {
 	}
 	return 1000
 }
+
+// parentBoostMaxChildren caps the contains fan-out for LCM parent-boosting
+// and child-suppression (GHOST_PARENT_BOOST_MAX_CHILDREN, default 12).
+// Parents beyond the cap are archive digests, not usable summaries.
+func parentBoostMaxChildren() int {
+	if v := os.Getenv("GHOST_PARENT_BOOST_MAX_CHILDREN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 12
+}
