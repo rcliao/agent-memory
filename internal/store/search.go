@@ -1128,15 +1128,20 @@ func (s *SQLiteStore) rerankMaxP(ctx context.Context, query string, results []Se
 		}
 	}
 
-	// Build a flat list of all chunks with their document index
-	type chunkRef struct {
-		docIdx   int
-		chunkIdx int
-	}
-	var allChunks []string
-	var refs []chunkRef
-
+	// Score per document, in current-rank order, checking the context
+	// deadline BETWEEN documents. This is what makes a caller's fetch budget
+	// enforceable: the old single monolithic batch ignored cancellation, so
+	// shell's 3s ghostFetchBudget silently ran 8s turns with zero degraded
+	// signals (the budget cancelled SQL but could not stop an in-flight
+	// rerank). On deadline, documents scored so far keep their reranked
+	// order and the unscored tail keeps its fused order — a graceful
+	// partial refinement of the head instead of an all-or-nothing stall.
+	docMaxScore := make([]float32, len(results))
+	scoredThrough := 0 // docs [0, scoredThrough) were scored before any deadline
 	for i, r := range results {
+		if ctx.Err() != nil {
+			break
+		}
 		chunks := chunkForReranking(r.Content, maxChunkLen)
 		if len(chunks) == 0 {
 			chunks = []string{r.Content}
@@ -1144,32 +1149,31 @@ func (s *SQLiteStore) rerankMaxP(ctx context.Context, query string, results []Se
 		if len(chunks) > maxChunksPerDoc {
 			chunks = chunks[:maxChunksPerDoc]
 		}
-		for ci, c := range chunks {
-			allChunks = append(allChunks, c)
-			refs = append(refs, chunkRef{docIdx: i, chunkIdx: ci})
+		reranked, err := s.reranker.Rerank(ctx, query, chunks)
+		if err != nil {
+			if ctx.Err() != nil {
+				break // deadline mid-inference: keep the partial head
+			}
+			return results // model failure: fall back to fused order
 		}
-	}
-
-	if len(allChunks) == 0 {
-		return results
-	}
-
-	// Single batch call to cross-encoder for all chunks
-	reranked, err := s.reranker.Rerank(ctx, query, allChunks)
-	if err != nil {
-		return results // fallback to original order
-	}
-
-	// Find max score per document
-	docMaxScore := make([]float32, len(results))
-	for i, rr := range reranked {
-		if i < len(refs) {
-			docIdx := refs[rr.Index].docIdx
-			if rr.Score > docMaxScore[docIdx] {
-				docMaxScore[docIdx] = rr.Score
+		for _, rr := range reranked {
+			if rr.Score > docMaxScore[i] {
+				docMaxScore[i] = rr.Score
 			}
 		}
+		scoredThrough = i + 1
 	}
+	if scoredThrough == 0 {
+		return results
+	}
+	if scoredThrough < len(results) && os.Getenv("GHOST_RERANK_DEBUG") == "1" {
+		fmt.Fprintf(os.Stderr, "rerank: DEADLINE scored=%d/%d\n", scoredThrough, len(results))
+	}
+	// Only the scored head participates in cross-encoder ordering; the
+	// unscored tail is re-appended in fused order after the sort below.
+	unscoredTail := results[scoredThrough:]
+	results = results[:scoredThrough]
+	docMaxScore = docMaxScore[:scoredThrough]
 
 	// Optional entity-name boost: for inferential queries that mention specific
 	// proper nouns (people, places), candidates that explicitly contain those
@@ -1263,11 +1267,15 @@ func (s *SQLiteStore) rerankMaxP(ctx context.Context, query string, results []Se
 		return scores[i].score > scores[j].score
 	})
 
-	out := make([]SearchResult, len(results))
-	for i, ds := range scores {
-		out[i] = results[ds.idx]
-		out[i].Similarity = float64(ds.score)
+	out := make([]SearchResult, 0, len(results)+len(unscoredTail))
+	for _, ds := range scores {
+		r := results[ds.idx]
+		r.Similarity = float64(ds.score)
+		out = append(out, r)
 	}
+	// Deadline partial: unscored docs follow the reranked head in their
+	// original fused order.
+	out = append(out, unscoredTail...)
 	return out
 }
 
