@@ -55,6 +55,31 @@ func envFloatDefault(name string, def float64) float64 {
 	return def
 }
 
+// actrActivationExact computes activation from real logged access timestamps
+// (memory_accesses table) instead of the three-point approximation:
+// A = ln(t_created^-d + Σ t_j^-d) — creation counts as the first presentation.
+// This is the path the approximation's measured regression points at: with a
+// real access log, recency and frequency come from the actual history.
+func actrActivationExact(created time.Time, accesses []time.Time, now time.Time) float64 {
+	const minAge = 1.0 / 60.0
+	d := actrDecay
+
+	age := func(t time.Time) float64 {
+		h := now.Sub(t).Hours()
+		if h < minAge {
+			h = minAge
+		}
+		return h
+	}
+
+	sum := math.Pow(age(created), -d)
+	for _, t := range accesses {
+		sum += math.Pow(age(t), -d)
+	}
+	activation := math.Log(sum)
+	return 1.0 / (1.0 + math.Exp(-(activation-actrThreshold())/actrNoiseS()))
+}
+
 // actrActivation returns the retrieval probability [0,1] for a memory from
 // its access statistics at time `now`.
 func actrActivation(m model.Memory, now time.Time) float64 {

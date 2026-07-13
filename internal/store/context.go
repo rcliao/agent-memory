@@ -178,6 +178,17 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	//   Procedural (skills): access frequency — strengthened by practice (testing effect)
 	now := s.now()
 
+	// ACT-R mode: prefetch real access histories so activation uses the exact
+	// log where present, falling back to the approximation otherwise.
+	var accessTimes map[string][]time.Time
+	if actrEnabled() {
+		ids := make([]string, 0, len(results))
+		for _, r := range results {
+			ids = append(ids, r.ID)
+		}
+		accessTimes, _ = s.loadAccessTimes(ctx, ids)
+	}
+
 	// scoreMap tracks scores by memory ID for edge boost merging
 	scoreMap := map[string]*contextCandidate{}
 
@@ -186,7 +197,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			continue // already included from pinned tiers
 		}
 		m := r.Memory
-		score := computeContextScore(m, r.Similarity, now, p.Scope)
+		score := computeContextScoreWithAccess(m, r.Similarity, now, p.Scope, accessTimes[m.ID])
 		scoreMap[m.ID] = &contextCandidate{memory: m, score: score}
 	}
 
@@ -564,6 +575,13 @@ func (s *SQLiteStore) countActiveMemories(ctx context.Context, ns string) (int, 
 
 // computeContextScore calculates the composite context score for a memory.
 func computeContextScore(m model.Memory, similarity float64, now time.Time, scope *SessionScope) float64 {
+	return computeContextScoreWithAccess(m, similarity, now, scope, nil)
+}
+
+// computeContextScoreWithAccess is computeContextScore plus an optional logged
+// access history; only the ACT-R path (GHOST_ACTR=1) consumes it, using exact
+// activation when timestamps exist and the approximation otherwise.
+func computeContextScoreWithAccess(m model.Memory, similarity float64, now time.Time, scope *SessionScope, accesses []time.Time) float64 {
 	// Relevance: use vector cosine similarity when available (>= 0.3 threshold from
 	// vector search), otherwise use 0.5 base for FTS/LIKE matches. Values below 0.3
 	// are RRF fusion scores (not cosine), and would cripple relevance if used directly.
@@ -598,8 +616,12 @@ func computeContextScore(m model.Memory, similarity float64, now time.Time, scop
 	// Opt-in ACT-R mode (GHOST_ACTR=1): one activation scalar subsumes the
 	// separate recency and access-frequency heuristics (see actr.go).
 	if actrEnabled() {
+		activation := actrActivation(m, now)
+		if len(accesses) > 0 {
+			activation = actrActivationExact(m.CreatedAt, accesses, now)
+		}
 		base = relevance*w.relevance + importance*w.importance +
-			actrActivation(m, now)*(w.recency+w.access)
+			activation*(w.recency+w.access)
 	}
 
 	// Opt-in utility term: reward memories that proved useful (co-retrieved) to

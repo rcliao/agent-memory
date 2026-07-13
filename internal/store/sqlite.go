@@ -236,6 +236,16 @@ func (s *SQLiteStore) migrate() error {
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN valid_from TEXT`)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN valid_to TEXT`)
 
+	// Phase 10: per-access log (see access_log.go) — the raw timestamps that
+	// access_count/last_accessed_at compress away. Pruned by GC (retention +
+	// per-memory cap), so it stays small.
+	s.db.Exec(`CREATE TABLE IF NOT EXISTS memory_accesses (
+		memory_id TEXT NOT NULL,
+		accessed_at TEXT NOT NULL
+	)`)
+	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memory_accesses_memory
+		ON memory_accesses(memory_id, accessed_at)`)
+
 	// Phase 5: similarity condition for reflect rules
 	s.db.Exec(`ALTER TABLE reflect_rules ADD COLUMN cond_similarity_gt REAL`)
 

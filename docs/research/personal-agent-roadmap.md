@@ -244,7 +244,7 @@ R@5 0.9083 / MRR 0.8277 / R@50 0.9968 (470q, embed cache).
   RRF fusion had no deterministic tie-break** past CreatedAt (seeds with equal
   BackdateHours tie exactly), so equal-scored results fell back to Go map-iteration
   order — fixed with the same priority→key tie-break Context uses. Canonical frozen-clock
-  baselines: personal meanMRR 0.790 / R@5 0.833; report multi_hop_recall 0.208,
+  baselines: personal meanMRR 0.790 / R@5 0.833; report multi_hop_recall 0.292,
   semantic 0.625, adversarial 0.667, temporal 0.667. LongMemEval_S gate re-verified
   after the refactor: R@5 0.9083 / MRR 0.8277, unchanged.
 - **`TestEvalMultiHop` cannot measure graph features** — `eval_seed.go` creates no edges,
@@ -252,6 +252,17 @@ R@5 0.9083 / MRR 0.8277 / R@50 0.9968 (470q, embed cache).
   scenarios or LongMemEval with `GHOST_BENCH_EXPAND_EDGES=1`.
 - Context-mode LongMemEval (R@5 ~0.50) is not comparable to search-mode (0.908): pinned
   phase + budget packing change what's countable. Compare within a mode only.
+
+## Follow-up shipped: per-access log (feat/access-log)
+`memory_accesses` table (approved): one row per retrieval, written where access_count
+is bumped (Get + context touch, same sensory exclusion), default-on via
+`GHOST_ACCESS_LOG`, pruned by gc (120d retention / 100-row cap / orphan sweep).
+Unblocks: (a) exact ACT-R activation — `actrActivationExact` uses the real history
+when rows exist (unit test proves a recent burst on an old memory out-activates the
+uniform-spacing approximation, which is exactly the case the prototype lost on);
+(b) B3 grounded-recall→utility feedback, which needs per-retrieval identity.
+Ranking is untouched with `GHOST_ACTR` off — eval suites unchanged (personal
+0.790/0.833, report multi_hop 0.292).
 
 ## Doc drift fixed
 - README auto-link threshold 0.80 → 0.85 (matches `edge.go` default).

@@ -20,6 +20,14 @@ import (
 // envBool reports whether a boolean env knob is switched on ("1").
 func envBool(name string) bool { return os.Getenv(name) == "1" }
 
+// envStr returns the env value or a default when unset.
+func envStr(name, def string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return def
+}
+
 func mmrLambda() float64 {
 	if env := os.Getenv("GHOST_MMR_LAMBDA"); env != "" {
 		if v, err := strconv.ParseFloat(env, 64); err == nil && v > 0 && v <= 1 {
