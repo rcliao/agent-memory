@@ -87,3 +87,33 @@ func (s *SQLiteStore) enforceSupersedeOrder(ctx context.Context, results []Searc
 	}
 	return results
 }
+
+// containsParents returns the IDs among results that are `contains` parents
+// (consolidation summaries). Used by rerankMaxP to keep summaries out of
+// cross-encoder promotion.
+func (s *SQLiteStore) containsParents(ctx context.Context, results []SearchResult) map[string]bool {
+	if len(results) == 0 {
+		return nil
+	}
+	placeholders := strings.Repeat("?,", len(results))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]interface{}, len(results))
+	for i, r := range results {
+		args[i] = r.ID
+	}
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(
+		`SELECT DISTINCT from_id FROM memory_edges WHERE rel = 'contains' AND from_id IN (%s)`,
+		placeholders), args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			out[id] = true
+		}
+	}
+	return out
+}

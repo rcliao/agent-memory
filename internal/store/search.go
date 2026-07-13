@@ -1136,11 +1136,28 @@ func (s *SQLiteStore) rerankMaxP(ctx context.Context, query string, results []Se
 	// rerank). On deadline, documents scored so far keep their reranked
 	// order and the unscored tail keeps its fused order — a graceful
 	// partial refinement of the head instead of an all-or-nothing stall.
+	// Consolidated summaries are cross-encoder bait: a "summary of 95
+	// conversations" contains every topic, so the CE scores it relevant to
+	// ANY query and promotes it over specific memories (measured on live
+	// personal queries: auto-summaries entered the injected top-5 only when
+	// the reranker was ON). Summaries exist for compaction, not injection —
+	// contains-parents are pinned to CE score 0 here, so they keep whatever
+	// position fused retrieval gave them and cannot be CE-promoted.
+	// Disable via GHOST_RERANK_ALLOW_SUMMARIES=1.
+	summaryParent := map[string]bool{}
+	if !envBool("GHOST_RERANK_ALLOW_SUMMARIES") {
+		summaryParent = s.containsParents(ctx, results)
+	}
+
 	docMaxScore := make([]float32, len(results))
 	scoredThrough := 0 // docs [0, scoredThrough) were scored before any deadline
 	for i, r := range results {
 		if ctx.Err() != nil {
 			break
+		}
+		if summaryParent[r.ID] {
+			scoredThrough = i + 1 // participates in ordering with score 0
+			continue
 		}
 		chunks := chunkForReranking(r.Content, maxChunkLen)
 		if len(chunks) == 0 {
