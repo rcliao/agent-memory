@@ -243,7 +243,7 @@ Failed:     6 (all benchmark, no hard failures)
 |---------|-----------|-----------------|--------|
 | Semantic gap | Embedding-based search (all-MiniLM-L6-v2); cross-encoder rerank lifts the FTS-only path too | Semantic MRR 0.51 → ~0.8+ | **Done w/ reranker** (0.833 FTS-only + `GHOST_RERANKER=local`; 0.625 without) |
 | Temporal ranking | Recency weight + **window anchoring** ("last week" → event-time window, temporal.go) | Temporal accuracy 0% → ~60%+ | **Done** (0.75; remaining miss is a semantic-gap case, needs embeddings) |
-| Multi-hop | ~~MMR~~ (measured regression), semantic linking / PPR (measured regression as default) | Multi-hop recall 0.29 → ~0.6+ | Open — both 2026-07 candidates measured NO-GO; needs embeddings or curated edges |
+| Multi-hop | **Expand-then-rerank**: wide internal pool (20) + cross-encoder precision cut. Diagnosis: chained pieces WERE retrieved at ranks 6–20 — a ranking problem, not recall | Multi-hop recall 0.29 → ~0.6+ | **Done w/ reranker** (0.54; the residual miss is a temporal-intent query that correctly skips the cross-encoder). ~~MMR~~/~~PPR~~ measured NO-GO |
 | Adversarial | Embeddings + namespace-aware scoring; reranker helps (0.667 → 0.75) | Adversarial MRR 0.25 → ~0.7+ | **Partial** (0.75 w/ reranker) |
 | No-result precision | Relevance threshold — `GHOST_MIN_SCORE=0.3` guards Context (measured regression-free); Search-path floor still open | Reduce false positives | **Partial** |
 | Utility feedback | Re-measured post co-retrieval fix: `GHOST_UTILITY_WEIGHT=0.1` now neutral on aggregate, helps utility slice; reranker lifts utility-recall 0.33 → 1.00 | Make utility signal meaningful | **Partial** |

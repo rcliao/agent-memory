@@ -424,6 +424,26 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 		limit = 20
 	}
 
+	// Expand-then-rerank: when a cross-encoder will run, retrieval becomes the
+	// high-RECALL stage — fetch a wider candidate pool than the caller asked
+	// for, let the reranker restore PRECISION over the full pool, and only
+	// then cut to the requested limit. Multi-hop evidence typically sits at
+	// ranks 6-20 (measured: multi-hop recall@5 0.30 -> 0.70 with a 20-pool +
+	// rerank); a plain top-k fetch throws it away before the reranker can
+	// rescue it. Pool size via GHOST_RERANK_POOL (default 20, min limit).
+	poolLimit := limit
+	if s.reranker != nil && (!hasTemporalIntent(p.Query) || envBool("GHOST_RERANK_TEMPORAL")) {
+		pool := 20
+		if v := os.Getenv("GHOST_RERANK_POOL"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				pool = n
+			}
+		}
+		if pool > poolLimit {
+			poolLimit = pool
+		}
+	}
+
 	// Collect ranked result lists from each retrieval method
 	type rankedResult struct {
 		result SearchResult
@@ -435,7 +455,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	memoryByID := map[string]SearchResult{}
 
 	// 1. FTS5 search
-	ftsResults := s.searchFTS(ctx, p, limit)
+	ftsResults := s.searchFTS(ctx, p, poolLimit)
 	for i, r := range ftsResults {
 		id := r.ID
 		methodRanks[id] = append(methodRanks[id], i+1)
@@ -445,7 +465,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	}
 
 	// 2. LIKE search
-	likeResults, _ := s.searchLike(ctx, p, nil, limit)
+	likeResults, _ := s.searchLike(ctx, p, nil, poolLimit)
 	for i, r := range likeResults {
 		id := r.ID
 		methodRanks[id] = append(methodRanks[id], i+1)
@@ -456,7 +476,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 
 	// 3. Vector search (if embedder available)
 	if s.embedder != nil {
-		vecResults, err := s.searchVector(ctx, p, nil, limit)
+		vecResults, err := s.searchVector(ctx, p, nil, poolLimit)
 		if err == nil {
 			for i, r := range vecResults {
 				id := r.ID
@@ -635,8 +655,8 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 		return fused[i].result.Key < fused[j].result.Key
 	})
 
-	if len(fused) > limit {
-		fused = fused[:limit]
+	if len(fused) > poolLimit {
+		fused = fused[:poolLimit]
 	}
 
 	results := make([]SearchResult, len(fused))
@@ -647,7 +667,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	// Graph edge expansion: follow 1-hop edges from top results to find
 	// connected memories for multi-hop queries.
 	if p.ExpandEdges && len(results) > 0 {
-		results = s.expandSearchEdges(ctx, p, results, limit)
+		results = s.expandSearchEdges(ctx, p, results, poolLimit)
 	}
 
 	// Pseudo-relevance feedback: take top-3 results, extract distinctive terms,
@@ -659,7 +679,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	// Note: empirically PRF adds noise on LoCoMo (regressed -7% MRR) when top-3
 	// seeds are unreliable. Prefer MMR diversification for multi-hop.
 	if (p.PRF || envBool("GHOST_PRF")) && len(results) >= 3 {
-		results = s.pseudoRelevanceFeedback(ctx, p, results, limit)
+		results = s.pseudoRelevanceFeedback(ctx, p, results, poolLimit)
 	}
 
 	// MMR diversification: re-rank top candidates to favor diversity.
@@ -689,7 +709,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	// GHOST_RERANK_TEMPORAL=1 forces rerank on temporal queries anyway.
 	rerankTemporalOK := !hasTemporalIntent(p.Query) || envBool("GHOST_RERANK_TEMPORAL")
 	if s.reranker != nil && len(results) > 1 && rerankTemporalOK {
-		rerankN := 10
+		rerankN := poolLimit
 		if v := os.Getenv("GHOST_RERANK_TOP_N"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 1 {
 				rerankN = n
@@ -738,6 +758,12 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 			fmt.Fprintf(os.Stderr, "rerank: SKIP query_len=%d top1=%.3f spread=%.3f\n",
 				len(p.Query), results[0].Similarity, results[0].Similarity-results[4].Similarity)
 		}
+	}
+
+	// Precision cut: the pool was widened for the reranker's benefit; the
+	// caller still gets exactly what they asked for.
+	if len(results) > limit {
+		results = results[:limit]
 	}
 
 	return results, nil
