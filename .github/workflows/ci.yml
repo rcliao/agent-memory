@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./...
+      - name: Tests (includes LLM-free eval suites)
+        run: go test ./... -count=1
+      # Surface the eval metrics in the CI log so PRs show their retrieval
+      # numbers at a glance. These suites are deterministic (frozen store
+      # clock) and dataset-free; the external benchmarks (LongMemEval,
+      # MemoryAgentBench) skip themselves without their datasets.
+      - name: Eval metrics summary
+        run: |
+          go test ./internal/store/ -count=1 -run 'TestEvalReport' -v 2>&1 | grep -E '"(adversarial_mrr|keyword_mrr|multi_hop_recall|negation_accuracy|semantic_mrr|temporal_accuracy|vague_accuracy)"' || true
+          go test ./internal/store/ -count=1 -run 'TestEvalPersonal$' -v 2>&1 | grep -E 'TOTAL' || true
+          go test ./internal/store/ -count=1 -run 'TestEvalLifecycle' -v 2>&1 | grep -E 'day 30|survival' || true
