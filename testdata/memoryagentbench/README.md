@@ -42,8 +42,19 @@ GHOST_BENCH_MAB=testdata/memoryagentbench/conflict_resolution.json \
 | mh_32k | 0.070 | 0.120 | 0.045 |
 | mh_64k | 0.110 | 0.180 | 0.059 |
 
-With the cross-encoder (`GHOST_RERANKER=local GHOST_RERANK_CHUNKS_PER_DOC=2`),
-6k tracks: sh hit@5 0.840 / MRR 0.702, mh hit@5 0.230 / hit@10 0.380.
-Multi-hop chains two facts with no shared vocabulary; entity-bridge hop2
-measured no lift over the reranker (see internal/store/hop2.go) — the
-remaining headroom is embeddings or ingest-time relation extraction.
+Full configuration matrix on the 6k tracks (2026-07-12):
+
+| config | sh hit@5 / MRR | mh hit@5 / hit@10 |
+|---|---|---|
+| FTS-only | 0.59 / 0.45 | 0.15 / 0.26 |
+| + cross-encoder | 0.84 / 0.70 | 0.23 / 0.38 |
+| embeddings only | 0.91 / 0.67 | 0.13 / 0.24 |
+| **embeddings + cross-encoder** | **0.99 / 0.77** | 0.22 / 0.39 |
+
+The two-stage stack (embedding recall + cross-encoder precision) nearly
+saturates single-hop conflict resolution — and it is ghost's default-capable
+configuration (`GHOST_EMBED_PROVIDER=local` is the default; add
+`GHOST_RERANKER=local GHOST_RERANK_CHUNKS_PER_DOC=2`). Multi-hop chains two
+facts with no shared vocabulary; entity-bridge hop2 measured no lift (see
+internal/store/hop2.go) — the remaining mh headroom needs ingest-time
+relation extraction or query decomposition with iterative retrieval.

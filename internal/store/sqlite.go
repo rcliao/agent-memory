@@ -17,6 +17,7 @@ import (
 
 	"github.com/rcliao/ghost/internal/embedding"
 	"github.com/rcliao/ghost/internal/model"
+	"strings"
 )
 
 // Compile-time check: SQLiteStore implements Store.
@@ -150,7 +151,8 @@ func (s *SQLiteStore) migrate() error {
 	CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
 		text,
 		content=chunks,
-		content_rowid=rowid
+		content_rowid=rowid,
+		tokenize='porter unicode61'
 	);
 	`
 	_, err := s.db.Exec(schema)
@@ -217,6 +219,29 @@ func (s *SQLiteStore) migrate() error {
 
 	// Backfill FTS for any existing chunks not yet indexed
 	s.db.Exec(`INSERT OR IGNORE INTO chunks_fts(rowid, text) SELECT rowid, text FROM chunks`)
+
+	// Phase 11: porter stemming for FTS. Pre-existing DBs built chunks_fts
+	// with the default unicode61 tokenizer, so "deploys"/"deployed" never
+	// matched "deploy" — measured +0.125 multi-hop recall on the in-repo
+	// report, all other suites and the LongMemEval_S gate unchanged. Porter
+	// is deliberately conservative: it does NOT unify deployment↔deploy or
+	// bundling↔bundler (suffix rules gate on stem measure) — closing those
+	// needs query-side expansion, not a tokenizer. Detect the old table via
+	// its stored DDL and rebuild (content-external FTS: repopulating from
+	// chunks is cheap and lossless).
+	var ftsSQL string
+	if err := s.db.QueryRow(
+		`SELECT sql FROM sqlite_master WHERE name = 'chunks_fts'`).Scan(&ftsSQL); err == nil &&
+		!strings.Contains(ftsSQL, "porter") {
+		s.db.Exec(`DROP TABLE chunks_fts`)
+		s.db.Exec(`CREATE VIRTUAL TABLE chunks_fts USING fts5(
+			text,
+			content=chunks,
+			content_rowid=rowid,
+			tokenize='porter unicode61'
+		)`)
+		s.db.Exec(`INSERT INTO chunks_fts(rowid, text) SELECT rowid, text FROM chunks`)
+	}
 
 	// Phase 4: pinned column for chronic accessibility (replaces tier=identity)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`)
