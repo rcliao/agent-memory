@@ -293,8 +293,12 @@ factconsolidation track of MemoryAgentBench (ICLR 2026): facts ingested in strea
 order (store clock advances per fact), later facts update earlier ones, questions
 probe the final state. Scored by gold-answer-substring in top-k retrieved memories —
 no LLM judge. See testdata/memoryagentbench/README.md for setup and the 2026-07-12
-FTS-only baseline (sh_6k hit@5 0.59; multi-hop tracks 0.07–0.15 = the known
-FTS-only ceiling, headroom for embeddings/entity-bridge work).
+FTS-only baseline: sh_6k hit@5 0.59; multi-hop tracks 0.07–0.15. With the
+cross-encoder (`GHOST_RERANKER=local GHOST_RERANK_CHUNKS_PER_DOC=2`): sh_6k
+hit@5 **0.84** / MRR 0.702, mh_6k hit@5 0.23 / hit@10 0.38 — expand-then-rerank
+is the dominant lever here too. Entity-bridge hop2 (GHOST_HOP2) measured NO
+additional lift (see hop2.go); the remaining mh headroom needs embeddings or
+ingest-time relation graphs.
 
 ## Personal-Agent Eval (in-repo, LLM-free)
 

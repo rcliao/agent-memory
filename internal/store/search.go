@@ -33,6 +33,8 @@ type SearchParams struct {
 	ExpandEdges   bool      // if true, expand results via 1-hop graph edges for multi-hop retrieval
 	PRF           bool      // if true, run pseudo-relevance feedback (re-query with expanded terms)
 	MMR           bool      // if true, diversify top results via Maximal Marginal Relevance
+
+	noHop2 bool // internal: suppresses entity-bridge expansion inside its own side query
 }
 
 // SearchResult wraps a memory with optional match info.
@@ -678,6 +680,12 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	//
 	// Note: empirically PRF adds noise on LoCoMo (regressed -7% MRR) when top-3
 	// seeds are unreliable. Prefer MMR diversification for multi-hop.
+	// Entity-bridge second hop (GHOST_HOP2): pull chained evidence that shares
+	// an entity with the first-hop results but no vocabulary with the query.
+	if hop2Enabled() && !p.noHop2 && len(results) > 0 {
+		results = s.hop2Expand(ctx, p, results, poolLimit)
+	}
+
 	if (p.PRF || envBool("GHOST_PRF")) && len(results) >= 3 {
 		results = s.pseudoRelevanceFeedback(ctx, p, results, poolLimit)
 	}

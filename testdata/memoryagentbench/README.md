@@ -42,5 +42,8 @@ GHOST_BENCH_MAB=testdata/memoryagentbench/conflict_resolution.json \
 | mh_32k | 0.070 | 0.120 | 0.045 |
 | mh_64k | 0.110 | 0.180 | 0.059 |
 
-Multi-hop (mh) chains two facts with no shared vocabulary — the known
-FTS-only ceiling; embeddings and entity-bridge retrieval are the levers.
+With the cross-encoder (`GHOST_RERANKER=local GHOST_RERANK_CHUNKS_PER_DOC=2`),
+6k tracks: sh hit@5 0.840 / MRR 0.702, mh hit@5 0.230 / hit@10 0.380.
+Multi-hop chains two facts with no shared vocabulary; entity-bridge hop2
+measured no lift over the reranker (see internal/store/hop2.go) — the
+remaining headroom is embeddings or ingest-time relation extraction.
