@@ -264,6 +264,23 @@ uniform-spacing approximation, which is exactly the case the prototype lost on);
 Ranking is untouched with `GHOST_ACTR` off — eval suites unchanged (personal
 0.790/0.833, report multi_hop 0.292).
 
+## Follow-up shipped: reranker unlock + temporal anchoring (feat/rerank-temporal)
+- **D3 reranker UNBLOCKED for the personal-agent case.** The 18.7s/query pure-Go figure
+  was a benchmark artifact (8 chunks × 20 docs × 2KB sessions); on ghost-sized memories
+  (≤400 tokens) `GHOST_RERANKER=local GHOST_RERANK_CHUNKS_PER_DOC=2` measures 0.2–1.0s
+  per query. Personal eval: meanMRR 0.790→0.861, R@5 0.833→0.917; report semantic
+  0.625→0.833, adversarial 0.667→0.75. The ORT float32 tail-collapse question is moot
+  for this deployment class — the correct pure-Go backend is simply affordable.
+- **Cross-encoder skips temporal-intent queries** (blind to recency; measured temporal
+  0.667→0.333 when applied). `GHOST_RERANK_TEMPORAL=1` overrides.
+- **Temporal window anchoring** (temporal.go): relative expressions ("yesterday", "last
+  week", "last month", "today", "this week") parse to event-time windows; the temporal
+  sort scores window proximity instead of newest-first. Fixes the last-week-loses-to-
+  this-week failure; report temporal 0.667→0.75. Remaining temporal miss is a
+  vocabulary-mismatch case (query "outage/degradation" vs content "latency spike") —
+  an embeddings-tier fix, not reachable FTS-only; PRF measured no rescue.
+- LongMemEval_S gate re-verified: R@5 0.9083 / MRR 0.8277, unchanged.
+
 ## Doc drift fixed
 - README auto-link threshold 0.80 → 0.85 (matches `edge.go` default).
 - eval.md PRUNE row: "10 accesses, 1 utility → soft-deleted" → "20+ accesses,

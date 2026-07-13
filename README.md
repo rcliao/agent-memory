@@ -237,7 +237,7 @@ All defaults are sensible; these tune the personalization and retrieval behavior
 | `GHOST_PRF` | `0` (off) | RM3 pseudo-relevance feedback: expand the query with terms shared by top-3 hits and re-search. Measured: +2.3pt R@5 but −3.6pt MRR on LongMemEval_S, at ~10× query cost — a recall-leaning tradeoff, not a default. |
 | `GHOST_SEARCH_MMR` | `0` (off) | Embedding-based MMR diversification of search results (requires embedder). Measured −42% MRR on LoCoMo — experimental only. |
 | `GHOST_EMBED_PROVIDER` | `local` | Embedding backend: `local` (all-MiniLM, pure Go), `ollama`, `openai`, or `none`. |
-| `GHOST_RERANKER` | off | `local` enables the cross-encoder reranker (ms-marco-MiniLM). |
+| `GHOST_RERANKER` | off | `local` enables the cross-encoder reranker (ms-marco-MiniLM, pure Go). On personal-scale memories (≤400 tokens) it costs 0.2–1s/query with `GHOST_RERANK_CHUNKS_PER_DOC=2` and lifts personal-eval meanMRR 0.790→0.861 — recommended for personal deployments. Temporal-intent queries skip it (the model is blind to recency); `GHOST_RERANK_TEMPORAL=1` overrides. |
 | `GHOST_DB` | `~/.ghost/memory.db` | Database path. |
 
 Lifecycle also applies **spaced-repetition ease** automatically during `reflect`: memories that repeatedly

@@ -502,25 +502,35 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	var relRecency map[string]float64
 	if (temporal || hasUpdateIntent(p.Query)) && len(fused) > 0 {
 		relRecency = make(map[string]float64, len(fused))
-		// Find time range: oldest and newest in result set
-		var minTime, maxTime time.Time
-		for _, f := range fused {
-			t := f.result.CreatedAt
-			if minTime.IsZero() || t.Before(minTime) {
-				minTime = t
+		if wFrom, wTo, ok := parseTemporalWindow(p.Query, refTime); ok {
+			// Bounded window ("yesterday", "last week", ...): score by
+			// proximity to the named window instead of newest-first —
+			// generic recency makes today's memory beat the actual
+			// last-week one (see temporal.go).
+			for _, f := range fused {
+				relRecency[f.result.ID] = windowProximity(f.result.CreatedAt, wFrom, wTo)
 			}
-			if maxTime.IsZero() || t.After(maxTime) {
-				maxTime = t
+		} else {
+			// Find time range: oldest and newest in result set
+			var minTime, maxTime time.Time
+			for _, f := range fused {
+				t := f.result.CreatedAt
+				if minTime.IsZero() || t.Before(minTime) {
+					minTime = t
+				}
+				if maxTime.IsZero() || t.After(maxTime) {
+					maxTime = t
+				}
 			}
-		}
-		span := maxTime.Sub(minTime).Hours()
-		if span < 1 {
-			span = 1 // avoid division by zero
-		}
-		for _, f := range fused {
-			// Normalize: newest=1.0, oldest=0.0
-			age := maxTime.Sub(f.result.CreatedAt).Hours()
-			relRecency[f.result.ID] = 1.0 - (age / span)
+			span := maxTime.Sub(minTime).Hours()
+			if span < 1 {
+				span = 1 // avoid division by zero
+			}
+			for _, f := range fused {
+				// Normalize: newest=1.0, oldest=0.0
+				age := maxTime.Sub(f.result.CreatedAt).Hours()
+				relRecency[f.result.ID] = 1.0 - (age / span)
+			}
 		}
 	}
 
@@ -671,7 +681,14 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	// the top-5 score (spread > threshold). High spread = retrieval already
 	// confident, no need to pay for wide rerank. Default threshold 0.15
 	// chosen empirically — tune via GHOST_RERANK_SPREAD_THRESHOLD.
-	if s.reranker != nil && len(results) > 1 {
+	// Temporal-intent queries skip the cross-encoder: it scores topical
+	// relevance only and is blind to recency, so it overwrites the
+	// recency-aware ordering built above (measured: in-repo temporal
+	// accuracy 0.667→0.333 when temporal queries are reranked; semantic
+	// +0.21 and personal meanMRR +0.07 when non-temporal ones are).
+	// GHOST_RERANK_TEMPORAL=1 forces rerank on temporal queries anyway.
+	rerankTemporalOK := !hasTemporalIntent(p.Query) || envBool("GHOST_RERANK_TEMPORAL")
+	if s.reranker != nil && len(results) > 1 && rerankTemporalOK {
 		rerankN := 10
 		if v := os.Getenv("GHOST_RERANK_TOP_N"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 1 {

@@ -2116,6 +2116,9 @@ func TestEvalReport(t *testing.T) {
 		{"temporal/yesterday_deploy", "what did we deploy yesterday", "deploy-yesterday", 5},
 		{"temporal/most_recent_deploy", "most recent production deployment", "deploy-yesterday", 5},
 		{"temporal/recent_incident", "production outage performance degradation", "perf-incident-mar", 5},
+		// Window anchoring: "last week" must beat this-week content created
+		// more recently (temporal.go); fails under monotonic newest-first recency.
+		{"temporal/last_week", "what happened last week in the project", "deploy-last-week", 5},
 	}
 
 	temporalCorrect := 0
