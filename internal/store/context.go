@@ -189,6 +189,23 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		accessTimes, _ = s.loadAccessTimes(ctx, ids)
 	}
 
+	// Direct-matched consolidation summaries are demoted: a contains-parent
+	// ("summary of 95 conversations") matches almost any query in fused
+	// retrieval (long digests hit FTS-OR terms and sit centroid-close in
+	// vector space) and was crowding real memories out of injection
+	// (measured on live personal queries: summaries at ranks 2-9). The
+	// LCM design intent is that summaries surface when their CHILDREN are
+	// relevant — that parent-boost path (edge expansion below) stays at
+	// full strength. Direct matches are scaled by GHOST_SUMMARY_DIRECT_WEIGHT
+	// (default 0.25; 1 disables the demotion).
+	summaryWeight := envFloatDefault("GHOST_SUMMARY_DIRECT_WEIGHT", 0.25)
+	var directParents map[string]bool
+	if summaryWeight < 1 {
+		asResults := make([]SearchResult, len(results))
+		copy(asResults, results)
+		directParents = s.containsParents(ctx, asResults)
+	}
+
 	// scoreMap tracks scores by memory ID for edge boost merging
 	scoreMap := map[string]*contextCandidate{}
 
@@ -198,6 +215,9 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		}
 		m := r.Memory
 		score := computeContextScoreWithAccess(m, r.Similarity, now, p.Scope, accessTimes[m.ID])
+		if directParents[m.ID] {
+			score *= summaryWeight
+		}
 		scoreMap[m.ID] = &contextCandidate{memory: m, score: score}
 	}
 
@@ -287,7 +307,11 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		}
 		for _, c := range candidates {
 			children, err := s.getContainsChildren(ctx, c.memory.ID)
-			if err == nil && len(children) > 0 {
+			if err == nil && len(children) > 0 && len(children) <= parentBoostMaxChildren() {
+				// Mega-digests (fan-out beyond the cap) never suppress:
+				// letting a 95-conversation blob replace the specific
+				// memory that actually matched is how junk summaries
+				// hijacked injection on live personal queries.
 				for _, childID := range children {
 					if candidateIDs[childID] {
 						suppressed[childID] = true
@@ -542,6 +566,15 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 			}
 			if _, ok := scoreMap[parentID]; ok {
 				continue // already in pool
+			}
+			// LCM parent-boost is for tight consolidations. A parent with
+			// huge fan-out (auto-digest of ~95 heartbeat conversations)
+			// summarizes everything and informs nothing — boosting it (at
+			// the child's score, floor 0.3) plus child-suppression REPLACED
+			// the specific relevant memory with the blob on every hit.
+			if kids, err := s.getContainsChildren(ctx, parentID); err != nil ||
+				len(kids) > parentBoostMaxChildren() {
+				continue
 			}
 			m, err := s.loadMemoryByID(ctx, parentID)
 			if err != nil {
