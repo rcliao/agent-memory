@@ -717,7 +717,16 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	// GHOST_RERANK_TEMPORAL=1 forces rerank on temporal queries anyway.
 	rerankTemporalOK := !hasTemporalIntent(p.Query) || envBool("GHOST_RERANK_TEMPORAL")
 	if s.reranker != nil && len(results) > 1 && rerankTemporalOK {
+		// Rerank window is capped independently of the pool: large callers
+		// (Context fetches 50 candidates) must not multiply cross-encoder
+		// cost. Measured on a 58k-chunk production DB: reranking the full
+		// 50-pool cost ~8s p50 per Context call; capping at 20 keeps the
+		// measured quality (all eval numbers were established with a
+		// 20-window) at ~2s. GHOST_RERANK_TOP_N overrides.
 		rerankN := poolLimit
+		if rerankN > 20 {
+			rerankN = 20
+		}
 		if v := os.Getenv("GHOST_RERANK_TOP_N"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 1 {
 				rerankN = n
