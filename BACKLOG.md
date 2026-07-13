@@ -15,6 +15,11 @@ repo's own measured findings. Statuses: `open | in-progress | done`.
 | 7 | **Ghost half of recall relevance** — umbreonmini's 31% `inject_irrelevant`: context injection surfaces memories the turn doesn't need. Levers: `GHOST_MIN_SCORE` floor (shipped, deployed), MinSpread flat-noise cut, and per-turn query quality (shell-side). | open | Measure via shell's owner-eval before/after the 2026-07-12 deploy (MinScore=0.3 + reranker may already have moved this). |
 | 8 | **Provenance-aware retrieval (H26)** — shell now reliably writes `chat:<id>` tags on every memory; add a retrieval-side audience filter (exclude/boost by chat scope) to complete the privacy-scoping story. | open | Tag filtering exists in Search/Context; what's missing is a *negative* scope (exclude other chats' private memories by default when a chat scope is active). Design needed: opt-in flag vs profile config. |
 
+## Retrieval-quality findings (2026-07-13 live-query reviews)
+- **MinSpread flat-noise filter: measured NO-GO as deployed default** — flat distributions are ambiguous on this workload (equally-relevant meal-memo walls score as flat as filler walls; at 0.15 it trimmed the best query and missed the worst). `GHOST_MIN_SPREAD` exists as an off-by-default knob.
+- **CJK FTS gap (real, measured)**: unicode61 tokenizes contiguous CJK runs as single tokens — 拖鞋 present in 7 chunks matches 0 in FTS (only punctuation-delimited terms like 鴻禧菇 index standalone, 185/197). Chinese recall currently rides the LIKE + vector channels; LIKE has no term scoring (created_at order only). **Next measured experiment: trigram-tokenized FTS** (index size + English-behavior tradeoffs need the full eval battery + latency bench).
+- Chat-scoped arm floods topic-divergent queries with the chat's dominant content class (meal memos); cross arm carries the topical answers. Structural improvement candidates: per-arm retrieval policy in shell, or topic-gate on the chat arm.
+
 ## Recently completed (2026-07-12 session, PRs #18–24)
 Bi-temporal validity · deterministic evals (injectable clock) · reranker unlock
 + temporal window anchoring · expand-then-rerank · lifecycle eval (FAMA) +

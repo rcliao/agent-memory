@@ -40,6 +40,7 @@ func TestRetrievalQualityAB(t *testing.T) {
 		}
 		chatRes, err := s.Context(ctx, ContextParams{
 			NS: ns, Query: q, Tags: tags, Budget: 2000, ExcludePinned: true,
+			MinSpread: envFloatDefault("GHOST_BENCH_CHAT_MINSPREAD", 0),
 		})
 		if err != nil {
 			t.Fatal(err)

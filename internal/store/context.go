@@ -265,6 +265,16 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	if p.MinScore == 0 {
 		p.MinScore = envFloatDefault("GHOST_MIN_SCORE", 0)
 	}
+	// Env fallback for the flat-noise filter. Measured live (2026-07-13)
+	// and left OFF by default: flat score distributions cannot distinguish
+	// "wall of topically-unmatched filler" (gadget question in a meal-log
+	// chat) from "wall of equally-relevant items" (a meal-memo query where
+	// every recent memo is a useful template) — at 0.15 the filter killed
+	// the best query in the corpus while missing the worst. Keep as an
+	// explicit per-call knob for callers who know their distribution.
+	if p.MinSpread == 0 {
+		p.MinSpread = envFloatDefault("GHOST_MIN_SPREAD", 0)
+	}
 	if len(candidates) > 0 && (p.MinScore > 0 || p.MinSpread > 0) {
 		if p.MinScore > 0 {
 			keep := candidates[:0]
