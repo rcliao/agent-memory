@@ -281,6 +281,22 @@ Ranking is untouched with `GHOST_ACTR` off — eval suites unchanged (personal
   an embeddings-tier fix, not reachable FTS-only; PRF measured no rescue.
 - LongMemEval_S gate re-verified: R@5 0.9083 / MRR 0.8277, unchanged.
 
+## Follow-up shipped: expand-then-rerank (feat/expand-then-rerank)
+Search now implements the two-stage retrieval architecture when a reranker is active:
+retrieval = high-RECALL stage (internal pool `GHOST_RERANK_POOL`, default 20, decoupled
+from the caller's limit), cross-encoder = PRECISION stage over the full pool, final cut
+to the requested k. Diagnosis that motivated it: the in-repo multi-hop "failures" were
+ranking failures — at a 20-pool the chained pieces were already retrieved (recall 0.80)
+but sat at ranks 6–20. Measured (reranker on): multi-hop 0.29→0.54, semantic 0.83→0.87,
+temporal/adversarial held, personal eval unchanged (0.861/0.917). Default path (no
+reranker) byte-equivalent; LongMemEval_S gate 0.9094/0.8280 (+0.001 jitter from the
+precision cut applying after edge expansion). External validation (2026-07-12 research
+pass): wide-then-rerank is the production-IR consensus and what Zep (cosine+BM25+graph →
+RRF/MMR/cross-encoder) and Mem0 (~50→5) ship; MemReranker (arXiv 2605.06132) documents
+generic rerankers failing on temporal constraints — ghost's temporal-intent skip is the
+right guard, independently arrived at. Future: blend cross-encoder scores with kind-aware
+signals rather than letting the model be sole final arbiter.
+
 ## Doc drift fixed
 - README auto-link threshold 0.80 → 0.85 (matches `edge.go` default).
 - eval.md PRUNE row: "10 accesses, 1 utility → soft-deleted" → "20+ accesses,
