@@ -733,31 +733,31 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 			}
 		}
 		skipRerank := false
-		if os.Getenv("GHOST_RERANK_ADAPTIVE") != "0" && len(results) >= 5 {
-			// Skip rerank entirely when retrieval is overwhelmingly confident:
-			// top-1 score very high AND top-5 spread comfortable. The cross-encoder
-			// rarely overturns a clear top-1 — paying ~10-20s per query for nothing.
-			// Crucially we do NOT also narrow the rerank window. On hard
-			// multi-hop queries the pre-rerank top-1 can look confident but be
-			// wrong, and the cross-encoder rescues evidence from rank 6-15 only
-			// if we hand it the full window. Narrow-when-confident regressed
-			// LoCoMo multi-hop MRR 0.620 → 0.525 in testing.
-			top1 := results[0].Similarity
-			spread := results[0].Similarity - results[4].Similarity
-			skipTop1 := 0.9
-			if v := os.Getenv("GHOST_RERANK_SKIP_TOP1"); v != "" {
-				if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
-					skipTop1 = f
+		if os.Getenv("GHOST_RERANK_ADAPTIVE") != "0" && len(results) >= 2 {
+			// Skip the cross-encoder when the retrieval channels already
+			// agree decisively. The original heuristic compared Similarity
+			// against cosine-scale thresholds (top1>=0.9) — but fused
+			// results carry RRF-scale scores (~0.02), so it NEVER fired in
+			// production (measured 0% skip on a 58k-chunk DB). The signal
+			// is now scale-free rank agreement: the RRF score ratio between
+			// the top-1 and top-2 fused results. A top-1 ranked first by
+			// every channel scores ~2x a runner-up ranked second everywhere
+			// — the cross-encoder essentially never overturns that. We only
+			// skip entirely, never narrow the window (narrow-when-confident
+			// regressed LoCoMo multi-hop MRR 0.620 → 0.525 in testing).
+			// Tune via GHOST_RERANK_SKIP_RATIO (default 1.5; 0 disables).
+			skipRatio := 1.5
+			if v := os.Getenv("GHOST_RERANK_SKIP_RATIO"); v != "" {
+				if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+					skipRatio = f
 				}
 			}
-			skipSpread := 0.2
-			if v := os.Getenv("GHOST_RERANK_SKIP_SPREAD"); v != "" {
-				if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
-					skipSpread = f
+			if skipRatio > 0 {
+				r1 := rrfScore(methodRanks[results[0].ID], 20)
+				r2 := rrfScore(methodRanks[results[1].ID], 20)
+				if r2 > 0 && r1/r2 >= skipRatio {
+					skipRerank = true
 				}
-			}
-			if top1 >= skipTop1 && spread >= skipSpread {
-				skipRerank = true
 			}
 		}
 		if rerankN > len(results) {
