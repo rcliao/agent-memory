@@ -760,6 +760,10 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 		}
 	}
 
+	// Supersede guard: superseded facts must not outrank their successors,
+	// whatever the ranking stages above concluded (see supersede_guard.go).
+	results = s.enforceSupersedeOrder(ctx, results)
+
 	// Precision cut: the pool was widened for the reranker's benefit; the
 	// caller still gets exactly what they asked for.
 	if len(results) > limit {

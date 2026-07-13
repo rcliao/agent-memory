@@ -23,8 +23,11 @@ import (
 // as a net win on the personal-agent eval (meanMRR 0.745→0.790). See docs/eval.md
 // and docs/research/personal-agent-roadmap.md (C4).
 
-// changeCueRe matches phrases that announce a fact has changed.
-var changeCueRe = regexp.MustCompile(`(?i)\b(switched (from|to)|now use[sd]?|no longer|instead of|replaced|moved to|migrated to|updated to|deprecated|superseded)\b`)
+// changeCueRe matches phrases that announce a fact has changed. Includes the
+// split construction "moved/migrated/switched/changed <object> from X to Y" —
+// the lifecycle eval caught that requiring the adjacent form ("moved to")
+// missed the most natural phrasing and silently skipped supersede detection.
+var changeCueRe = regexp.MustCompile(`(?i)\b(switched (from|to)|now use[sd]?|no longer|instead of|replaced|moved to|migrated to|updated to|deprecated|superseded|(moved|migrated|switched|changed)\b[^.!?]{0,60}\bfrom\b[^.!?]{0,60}\bto\b)`)
 
 // freshnessEnabled reports whether supersede detection is active. Default ON
 // (validated as a net win on the personal-agent eval: meanMRR 0.745→0.790); set
