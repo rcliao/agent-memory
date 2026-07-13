@@ -121,3 +121,14 @@ func jaccard(a, b map[string]bool) float64 {
 	}
 	return float64(inter) / float64(union)
 }
+
+// ftsCandidateCap bounds phase-1 FTS candidates (GHOST_FTS_CANDIDATES,
+// default 1000) — see searchFTS's two-phase query.
+func ftsCandidateCap() int {
+	if v := os.Getenv("GHOST_FTS_CANDIDATES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 1000
+}

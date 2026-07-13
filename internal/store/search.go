@@ -1522,28 +1522,42 @@ func (s *SQLiteStore) searchFTS(ctx context.Context, p SearchParams, limit int) 
 		ftsWeight = 0.2
 	}
 
+	// Two-phase FTS: OR-joined queries can match most of the store (measured:
+	// 51,827 of 58k chunks on a production DB), and the custom ORDER BY
+	// (priority + recency + rank) forced SQLite to join and score every match
+	// — minutes per query. Phase 1 lets FTS5's native bm25 rank cut the match
+	// set to the best GHOST_FTS_CANDIDATES chunks (index-driven, ~10ms);
+	// phase 2 applies ghost's scoring to only those. Matches past the cap
+	// carry the worst bm25 scores and were effectively noise in the fused
+	// ranking. Cap default 1000, env-tunable.
 	q := fmt.Sprintf(`
+		WITH matched AS (
+			SELECT rowid, rank FROM chunks_fts
+			WHERE chunks_fts MATCH ?
+			ORDER BY rank LIMIT %d
+		)
 		SELECT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
 		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at,
 		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned
-		FROM memories m
+		FROM matched f
+		INNER JOIN chunks c ON c.rowid = f.rowid
+		INNER JOIN memories m ON m.id = c.memory_id
 		INNER JOIN (
 			SELECT ns, key, MAX(version) AS max_ver
 			FROM memories WHERE deleted_at IS NULL
 			GROUP BY ns, key
 		) latest ON m.ns = latest.ns AND m.key = latest.key AND m.version = latest.max_ver
-		INNER JOIN chunks c ON c.memory_id = m.id
-		INNER JOIN chunks_fts fts ON c.rowid = fts.rowid
-		WHERE %s AND chunks_fts MATCH ?
+		WHERE %s
 		GROUP BY m.id
 		ORDER BY
 			(CASE m.priority WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'normal' THEN 2 ELSE 1 END) * 0.1
 			+ (1.0 / (1.0 + (julianday(?) - julianday(m.created_at)) / 7.0)) * %f
-			+ (MIN(fts.rank) * -%f)
+			+ (MIN(f.rank) * -%f)
 			DESC
-		LIMIT ?`, strings.Join(where, " AND "), recencyWeight, ftsWeight)
+		LIMIT ?`, ftsCandidateCap(), strings.Join(where, " AND "), recencyWeight, ftsWeight)
 
-	args = append(args, ftsQuery, now, limit)
+	args = append([]interface{}{ftsQuery}, args...)
+	args = append(args, now, limit)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -1655,7 +1669,7 @@ func (s *SQLiteStore) searchVector(ctx context.Context, p SearchParams, exclude 
 		}
 
 		var chunkVec embedding.Vector
-		if err := json.Unmarshal([]byte(embJSON), &chunkVec); err != nil {
+		if chunkVec, err = decodeEmbedding([]byte(embJSON)); err != nil {
 			continue
 		}
 

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -336,7 +335,7 @@ func (s *SQLiteStore) autoLinkEdges(ctx context.Context, memoryID, ns string, me
 			continue
 		}
 		var vec embedding.Vector
-		if err := json.Unmarshal([]byte(embJSON), &vec); err != nil {
+		if vec, err = decodeEmbedding([]byte(embJSON)); err != nil {
 			continue
 		}
 		sim := embedding.CosineSimilarity(memoryVec, vec)
