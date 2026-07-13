@@ -229,6 +229,11 @@ func (s *SQLiteStore) migrate() error {
 	// needs query-side expansion, not a tokenizer. Detect the old table via
 	// its stored DDL and rebuild (content-external FTS: repopulating from
 	// chunks is cheap and lossless).
+	// Phase 12: convert legacy JSON-text embeddings to the binary blob
+	// format (see embedding_codec.go). One-time, in-place, same column —
+	// measured ~300ms/query of JSON decode on a 58k-chunk DB before this.
+	s.migrateEmbeddingBlobs()
+
 	var ftsSQL string
 	if err := s.db.QueryRow(
 		`SELECT sql FROM sqlite_master WHERE name = 'chunks_fts'`).Scan(&ftsSQL); err == nil &&

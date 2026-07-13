@@ -82,7 +82,7 @@ func (s *SQLiteStore) applySimilarityMerge(ctx context.Context, rule ReflectRule
 			continue
 		}
 		var vec embedding.Vector
-		if err := json.Unmarshal([]byte(embJSON), &vec); err != nil {
+		if vec, err = decodeEmbedding([]byte(embJSON)); err != nil {
 			continue
 		}
 		embMap[memID] = vec
@@ -591,7 +591,7 @@ func (s *SQLiteStore) loadEmbeddings(ctx context.Context, ids []string) map[stri
 			continue
 		}
 		var vec embedding.Vector
-		if err := json.Unmarshal([]byte(embJSON), &vec); err != nil {
+		if vec, err = decodeEmbedding([]byte(embJSON)); err != nil {
 			continue
 		}
 		embMap[memID] = vec

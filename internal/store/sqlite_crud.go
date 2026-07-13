@@ -163,11 +163,9 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 	for i, c := range chunks {
 		chunkID := s.newID()
 
-		var embeddingJSON *string
+		var embeddingBlob []byte
 		if i < len(chunkVecs) && len(chunkVecs[i]) > 0 {
-			b, _ := json.Marshal(chunkVecs[i])
-			str := string(b)
-			embeddingJSON = &str
+			embeddingBlob = encodeEmbedding(chunkVecs[i])
 			if i == 0 {
 				firstChunkVec = chunkVecs[i]
 			}
@@ -176,7 +174,7 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		_, err = tx.ExecContext(ctx,
 			`INSERT INTO chunks (id, memory_id, seq, text, start_line, end_line, embedding)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			chunkID, id, i, c.Text, c.StartLine, c.EndLine, embeddingJSON)
+			chunkID, id, i, c.Text, c.StartLine, c.EndLine, embeddingBlob)
 		if err != nil {
 			return nil, fmt.Errorf("insert chunk: %w", err)
 		}
@@ -500,15 +498,13 @@ func (s *SQLiteStore) BatchBenchInsert(ctx context.Context, ns string, sessions 
 		chunkID := s.newID()
 		memID := memIDs[chunk.sessionIdx]
 
-		var embJSON *string
+		var embBlob []byte
 		if embeddings != nil && ci < len(embeddings) && len(embeddings[ci]) > 0 {
-			b, _ := json.Marshal(embeddings[ci])
-			str := string(b)
-			embJSON = &str
+			embBlob = encodeEmbedding(embeddings[ci])
 		}
 
 		if _, err := chunkStmt.ExecContext(ctx,
-			chunkID, memID, chunk.seq, chunk.text, strings.Count(chunk.text, "\n")+1, embJSON); err != nil {
+			chunkID, memID, chunk.seq, chunk.text, strings.Count(chunk.text, "\n")+1, embBlob); err != nil {
 			return fmt.Errorf("insert chunk %s seq=%d: %w", sessions[chunk.sessionIdx].Key, chunk.seq, err)
 		}
 	}
@@ -565,7 +561,7 @@ func (s *SQLiteStore) buildEdges(ctx context.Context, ns string, maxPerNode int)
 		}
 		m := memInfo{id: id, content: content}
 		if embJSON.Valid {
-			json.Unmarshal([]byte(embJSON.String), &m.vec)
+			m.vec, _ = decodeEmbedding([]byte(embJSON.String))
 		}
 		m.entities = entity.Extract(content)
 		mems = append(mems, m)
@@ -945,8 +941,8 @@ func (s *SQLiteStore) findSimilarForDedup(ctx context.Context, ns string, vec em
 		if rows.Scan(&key, &embJSON) != nil {
 			continue
 		}
-		var existingVec embedding.Vector
-		if json.Unmarshal([]byte(embJSON), &existingVec) != nil {
+		existingVec, err := decodeEmbedding([]byte(embJSON))
+		if err != nil {
 			continue
 		}
 		sim := embedding.CosineSimilarity(vec, existingVec)
