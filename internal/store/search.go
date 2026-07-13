@@ -724,7 +724,7 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 			}
 		}
 		skipRerank := false
-		if os.Getenv("GHOST_RERANK_ADAPTIVE") == "1" && len(results) >= 5 {
+		if os.Getenv("GHOST_RERANK_ADAPTIVE") != "0" && len(results) >= 5 {
 			// Skip rerank entirely when retrieval is overwhelmingly confident:
 			// top-1 score very high AND top-5 spread comfortable. The cross-encoder
 			// rarely overturns a clear top-1 — paying ~10-20s per query for nothing.
@@ -1105,7 +1105,14 @@ func (s *SQLiteStore) rerankMaxP(ctx context.Context, query string, results []Se
 			maxChunkLen = n
 		}
 	}
-	maxChunksPerDoc := 8
+	// Default 2 chunks/doc — the "fast profile" (0.2–1s/query on
+	// personal-scale memories, which 2×1024 chars fully covers). On
+	// long-session stores this trades recall@5 for MRR (LongMemEval_S:
+	// R@5 0.908→0.873, MRR 0.828→0.878, preference-slice MRR +0.25);
+	// raise to 8 for full-coverage MaxP when latency is acceptable
+	// (~60s/query worst case on 2KB sessions — measured, not viable
+	// as an ambient default).
+	maxChunksPerDoc := 2
 	if v := os.Getenv("GHOST_RERANK_CHUNKS_PER_DOC"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxChunksPerDoc = n

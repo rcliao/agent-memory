@@ -237,7 +237,7 @@ All defaults are sensible; these tune the personalization and retrieval behavior
 | `GHOST_PRF` | `0` (off) | RM3 pseudo-relevance feedback: expand the query with terms shared by top-3 hits and re-search. Measured: +2.3pt R@5 but −3.6pt MRR on LongMemEval_S, at ~10× query cost — a recall-leaning tradeoff, not a default. |
 | `GHOST_SEARCH_MMR` | `0` (off) | Embedding-based MMR diversification of search results (requires embedder). Measured −42% MRR on LoCoMo — experimental only. |
 | `GHOST_EMBED_PROVIDER` | `local` | Embedding backend: `local` (all-MiniLM, pure Go), `ollama`, `openai`, or `none`. |
-| `GHOST_RERANKER` | off | `local` enables the cross-encoder reranker (ms-marco-MiniLM, pure Go) and switches Search to **expand-then-rerank**: retrieval becomes the high-recall stage (internal pool of `GHOST_RERANK_POOL`, default 20, regardless of the caller's limit), the cross-encoder restores precision over the full pool, then results are cut to the requested k. On personal-scale memories (≤400 tokens) it costs 0.2–1s/query with `GHOST_RERANK_CHUNKS_PER_DOC=2`; measured: personal meanMRR 0.790→0.861, multi-hop recall 0.29→0.54, semantic MRR 0.625→0.867. Temporal-intent queries skip it (the model is blind to recency); `GHOST_RERANK_TEMPORAL=1` overrides. |
+| `GHOST_RERANKER` | `auto` | Cross-encoder reranker (ms-marco-MiniLM, pure Go). **`auto` (default): on when the model is already in `~/.ghost/models` — a fresh install never touches the network.** `local` forces it (downloads on first use); `none` disables. When active, Search runs **expand-then-rerank**: retrieval is the high-recall stage (pool `GHOST_RERANK_POOL`, default 20), the cross-encoder restores precision, results are cut to the requested k. Fast profile by default (`GHOST_RERANK_CHUNKS_PER_DOC=2`, 0.2–1s/query on personal-scale memories; raise for full-coverage MaxP on long documents). Adaptive skip on confident queries is on by default (`GHOST_RERANK_ADAPTIVE=0` disables). Temporal-intent queries skip the model (blind to recency); `GHOST_RERANK_TEMPORAL=1` overrides. Measured: personal meanMRR 0.790→0.861, MemoryAgentBench single-hop hit@5 0.91→0.99 on top of embeddings. |
 | `GHOST_DB` | `~/.ghost/memory.db` | Database path. |
 
 Lifecycle also applies **spaced-repetition ease** automatically during `reflect`: memories that repeatedly
@@ -249,7 +249,7 @@ Retrieval is measured against published long-term-memory benchmarks — all LLM-
 
 | Benchmark | Metric | Ghost |
 |-----------|--------|-------|
-| LongMemEval_S (470q) | Recall@5 / MRR | **0.908 / 0.827** |
+| LongMemEval_S (470q) | Recall@5 / MRR | **0.908 / 0.827** (hybrid retrieval) · **0.873 / 0.878** (+ cross-encoder fast profile: trades recall@5 for MRR; preference-slice MRR 0.43→0.68) |
 | LoCoMo (best config) | Recall@5 / MRR | 0.750 / 0.595 |
 | HaluMem-Medium (retrieval, +rerank) | MRR gain | +64% |
 

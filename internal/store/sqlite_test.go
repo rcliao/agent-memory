@@ -18,6 +18,12 @@ func TestMain(m *testing.M) {
 	if os.Getenv("GHOST_EMBED_PROVIDER") == "" {
 		os.Setenv("GHOST_EMBED_PROVIDER", "none")
 	}
+	// Same guard for the reranker: "auto" default would silently enable the
+	// cross-encoder on machines that have the model downloaded, making eval
+	// numbers machine-dependent. Explicit GHOST_RERANKER=local still wins.
+	if os.Getenv("GHOST_RERANKER") == "" {
+		os.Setenv("GHOST_RERANKER", "none")
+	}
 	os.Exit(m.Run())
 }
 
