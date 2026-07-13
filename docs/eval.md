@@ -264,6 +264,38 @@ Failed:     6 (all benchmark, no hard failures)
 - Evals are deterministic since the injectable store clock (`SetClock`, `evalClockEpoch`);
   always A/B with `-count=1` in one sitting anyway to dodge go-test caching.
 
+## Lifecycle Eval (in-repo, LLM-free, longitudinal)
+
+`TestEvalLifecycle` (internal/store/eval_lifecycle_test.go) measures the thing no
+frozen-store suite can: whether the store's self-rewriting (reflect, supersede,
+decay, GC) IMPROVES retrieval as the store ages. 30 virtual days on the injectable
+clock; facts evolve (Webpack→Vite→esbuild), noise accumulates daily, reflect+GC run
+every 5 days, measured per epoch:
+
+- **stable recall** — unchanged facts stay retrievable, including a survival set
+  never probed along the way (no practice effect keeping them alive)
+- **FAMA** (Forgetting-Aware Memory Accuracy, after Memora arXiv 2604.20006) —
+  the CURRENT version of an evolved fact must outrank all superseded versions
+
+Run with reflect on/off to attribute trajectory changes to the lifecycle.
+
+Day-one findings (2026-07-12): reflect forgets 40% of the store (77→47 active) at
+zero recall cost; the cross-encoder reranker REGRESSED FAMA 0.67→0.33 (topical
+match resurfaces obsolete facts phrased in the question's vocabulary) — fixed by
+the supersede guard (supersede_guard.go: contradicts-edge order is enforced after
+ranking); and the change-cue regex missed "moved/migrated X from A to B" phrasing —
+fixed. Post-fix: FAMA 1.00 on both paths through day 30.
+
+## MemoryAgentBench — Conflict Resolution (external, LLM-free)
+
+`TestMemoryAgentBenchCR` (internal/store/memoryagentbench.go) runs the
+factconsolidation track of MemoryAgentBench (ICLR 2026): facts ingested in stream
+order (store clock advances per fact), later facts update earlier ones, questions
+probe the final state. Scored by gold-answer-substring in top-k retrieved memories —
+no LLM judge. See testdata/memoryagentbench/README.md for setup and the 2026-07-12
+FTS-only baseline (sh_6k hit@5 0.59; multi-hop tracks 0.07–0.15 = the known
+FTS-only ceiling, headroom for embeddings/entity-bridge work).
+
 ## Personal-Agent Eval (in-repo, LLM-free)
 
 The public benchmarks below (LongMemEval / LoCoMo / HaluMem) measure conversational
