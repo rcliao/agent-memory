@@ -241,13 +241,28 @@ Failed:     6 (all benchmark, no hard failures)
 
 | Problem | Likely fix | Expected impact | Status |
 |---------|-----------|-----------------|--------|
-| Semantic gap | Embedding-based search (all-MiniLM-L6-v2) | Semantic MRR 0.51 → ~0.8+ | Open |
-| Temporal ranking | Boost recency weight for episodic queries, or time-aware reranking | Temporal accuracy 0% → ~60%+ | **Done** (0.67) |
-| Multi-hop | Return more diverse results (MMR), or semantic linking | Multi-hop recall 0.29 → ~0.6+ | Open |
-| Adversarial | Embeddings + namespace-aware scoring | Adversarial MRR 0.25 → ~0.7+ | **Partial** (0.50) |
-| No-result precision | Relevance threshold — suppress results below minimum score | Reduce false positives | Open |
-| Utility feedback | Increase utility weight in context scoring, or add dedicated utility_ratio factor | Make utility signal meaningful | Open |
+| Semantic gap | Embedding-based search (all-MiniLM-L6-v2); cross-encoder rerank lifts the FTS-only path too | Semantic MRR 0.51 → ~0.8+ | **Done w/ reranker** (0.833 FTS-only + `GHOST_RERANKER=local`; 0.625 without) |
+| Temporal ranking | Recency weight + **window anchoring** ("last week" → event-time window, temporal.go) | Temporal accuracy 0% → ~60%+ | **Done** (0.75; remaining miss is a semantic-gap case, needs embeddings) |
+| Multi-hop | ~~MMR~~ (measured regression), semantic linking / PPR (measured regression as default) | Multi-hop recall 0.29 → ~0.6+ | Open — both 2026-07 candidates measured NO-GO; needs embeddings or curated edges |
+| Adversarial | Embeddings + namespace-aware scoring; reranker helps (0.667 → 0.75) | Adversarial MRR 0.25 → ~0.7+ | **Partial** (0.75 w/ reranker) |
+| No-result precision | Relevance threshold — `GHOST_MIN_SCORE=0.3` guards Context (measured regression-free); Search-path floor still open | Reduce false positives | **Partial** |
+| Utility feedback | Re-measured post co-retrieval fix: `GHOST_UTILITY_WEIGHT=0.1` now neutral on aggregate, helps utility slice; reranker lifts utility-recall 0.33 → 1.00 | Make utility signal meaningful | **Partial** |
 | Context fill | Lower minimum score threshold for budget fill, or excerpt more memories | Budget util 38% → 70%+ | Open |
+
+**2026-07-12 measured-verdict summary** (full details in `docs/research/personal-agent-roadmap.md`):
+- **Reranker unlocked for personal-scale memories**: the ~18.7s/query pure-Go figure was a
+  benchmark artifact (8 chunks × 20 × 2KB sessions). On real ghost memories (≤400 tokens),
+  `GHOST_RERANKER=local GHOST_RERANK_CHUNKS_PER_DOC=2` costs **0.2–1.0s/query** and lifts the
+  personal eval meanMRR **0.790 → 0.861**, recall@5 **0.833 → 0.917** (utility-recall 0.33→1.00,
+  freshness-update 0.14→0.33, semantic 0.625→0.833, adversarial 0.667→0.75).
+- **Temporal-intent queries skip the cross-encoder** (it is blind to recency and regressed
+  temporal accuracy 0.667→0.333 when applied; `GHOST_RERANK_TEMPORAL=1` overrides).
+- **Temporal window anchoring** (temporal.go): "yesterday / last week / last month / today /
+  this week" parse to event-time windows; candidates score by window proximity instead of
+  newest-first recency. Fixes "what happened last week" losing to newer this-week content.
+  LongMemEval_S gate unchanged (R@5 0.9083 / MRR 0.8277).
+- Evals are deterministic since the injectable store clock (`SetClock`, `evalClockEpoch`);
+  always A/B with `-count=1` in one sitting anyway to dodge go-test caching.
 
 ## Personal-Agent Eval (in-repo, LLM-free)
 
