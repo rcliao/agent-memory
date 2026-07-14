@@ -117,3 +117,40 @@ func (s *SQLiteStore) containsParents(ctx context.Context, results []SearchResul
 	}
 	return out
 }
+
+// containsParentLiveness returns, for each result that is a contains-parent,
+// the fraction of its children that are still ALIVE (non-deleted, non-dormant).
+// Drives liveness-scaled retrieval rights: summaries defer to living children
+// and inherit searchability as the children age out.
+func (s *SQLiteStore) containsParentLiveness(ctx context.Context, results []SearchResult) map[string]float64 {
+	if len(results) == 0 {
+		return nil
+	}
+	placeholders := strings.Repeat("?,", len(results))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]interface{}, len(results))
+	for i, r := range results {
+		args[i] = r.ID
+	}
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT e.from_id,
+		       COUNT(*) AS total,
+		       SUM(CASE WHEN m.deleted_at IS NULL AND COALESCE(m.tier,'stm') != 'dormant' THEN 1 ELSE 0 END) AS alive
+		FROM memory_edges e
+		JOIN memories m ON m.id = e.to_id
+		WHERE e.rel = 'contains' AND e.from_id IN (%s)
+		GROUP BY e.from_id`, placeholders), args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string]float64{}
+	for rows.Next() {
+		var id string
+		var total, alive int
+		if rows.Scan(&id, &total, &alive) == nil && total > 0 {
+			out[id] = float64(alive) / float64(total)
+		}
+	}
+	return out
+}

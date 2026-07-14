@@ -22,6 +22,21 @@ repo's own measured findings. Statuses: `open | in-progress | done`.
 - **CJK FTS gap (real, measured)**: unicode61 tokenizes contiguous CJK runs as single tokens — 拖鞋 present in 7 chunks matches 0 in FTS (only punctuation-delimited terms like 鴻禧菇 index standalone, 185/197). Chinese recall currently rides the LIKE + vector channels; LIKE has no term scoring (created_at order only). **Next measured experiment: trigram-tokenized FTS** (index size + English-behavior tradeoffs need the full eval battery + latency bench).
 - Chat-scoped arm floods topic-divergent queries with the chat's dominant content class (meal memos); cross arm carries the topical answers. Structural improvement candidates: per-arm retrieval policy in shell, or topic-gate on the chat arm.
 
+## Summary-node redesign SHIPPED (2026-07-14)
+The four-rule redesign is live: (1) children are first-class — unconditional
+parent→child suppression removed; (2) **liveness-scaled retrieval rights** —
+direct-matched summaries score ×(1−activeChildren/total): defer while children
+live, inherit searchability as they age out (replaces the flat 0.25);
+(3) **packing substitution** — under budget pressure, 3+ co-retrieved children
+of one parent are replaced by the parent carrying `summary_of` drill-down keys
+(`ghost expand` recovers detail) — compression proportional to pressure;
+(4) fan-out caps keep archive digests out of all of it. Proven by
+TestEvalPackingSubstitution (budget-shrink: roomy=specifics, tight=summary+keys)
+and TestEvalSummaryLivenessRights (dormant children → summary retrievable).
+Remaining shell-side: consolidation must go through ghost consolidate so
+digests are born with contains edges (the legacy edge-less exchange-summaries
+stay governed only by the relevance gate until then).
+
 ## Recently completed (2026-07-12 session, PRs #18–24)
 Bi-temporal validity · deterministic evals (injectable clock) · reranker unlock
 + temporal window anchoring · expand-then-rerank · lifecycle eval (FAMA) +

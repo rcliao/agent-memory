@@ -603,17 +603,44 @@ func TestContainsSuppression(t *testing.T) {
 		t.Fatalf("context: %v", err)
 	}
 
-	found := map[string]bool{}
+	// REDESIGN CONTRACT (2026-07-14): children are first-class. With a roomy
+	// budget the specifics pack individually — the summary only replaces
+	// them via packing substitution under budget pressure, and a direct-
+	// matched summary with living children is liveness-demoted, so if it
+	// appears at all it ranks BELOW every living child.
+	rank := map[string]int{}
+	for i, m := range result.Memories {
+		rank[m.Key] = i + 1
+	}
+	for _, key := range []string{"detail-1", "detail-2", "detail-3"} {
+		if rank[key] == 0 {
+			t.Errorf("detail %q missing: roomy budget must pack specifics, not suppress them", key)
+		}
+	}
+	// The summary must not outrank children that actually MATCHED the
+	// query (score above noise); children pulled in only by graph
+	// expansion at ~0 score may legitimately trail it.
+	score := map[string]float64{}
 	for _, m := range result.Memories {
-		found[m.Key] = true
+		score[m.Key] = m.Score
+	}
+	if sr := rank["auth-summary"]; sr > 0 {
+		for _, key := range []string{"detail-1", "detail-2", "detail-3"} {
+			if dr := rank[key]; dr > 0 && score[key] >= 0.1 && sr < dr {
+				t.Errorf("summary (rank %d) outranks matching child %q (rank %d, score %.2f)",
+					sr, key, dr, score[key])
+			}
+		}
 	}
 
-	// If summary is in results, details should be suppressed
-	if found["auth-summary"] {
-		for _, key := range []string{"detail-1", "detail-2", "detail-3"} {
-			if found[key] {
-				t.Errorf("detail %q should be suppressed when summary is present", key)
-			}
+	// Under budget pressure the summary substitutes WITH drill-down keys.
+	tight, err := s.Context(ctx, ContextParams{NS: "test", Query: "authentication JWT", Budget: 100})
+	if err != nil {
+		t.Fatalf("tight context: %v", err)
+	}
+	for _, m := range tight.Memories {
+		if m.Key == "auth-summary" && len(m.SummaryOf) < 3 {
+			t.Errorf("substituted summary missing drill-down keys: %v", m.SummaryOf)
 		}
 	}
 }
