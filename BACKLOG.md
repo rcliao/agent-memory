@@ -96,6 +96,28 @@ repo's own measured findings. Statuses: `open | in-progress | done`.
 | 7 | **Ghost half of recall relevance** — umbreonmini's 31% `inject_irrelevant`: context injection surfaces memories the turn doesn't need. Levers: `GHOST_MIN_SCORE` floor (shipped, deployed), MinSpread flat-noise cut, and per-turn query quality (shell-side). | open | Measure via shell's owner-eval before/after the 2026-07-12 deploy (MinScore=0.3 + reranker may already have moved this). |
 | 8 | **Provenance-aware retrieval (H26)** — shell now reliably writes `chat:<id>` tags on every memory; add a retrieval-side audience filter (exclude/boost by chat scope) to complete the privacy-scoping story. | open | Tag filtering exists in Search/Context; what's missing is a *negative* scope (exclude other chats' private memories by default when a chat scope is active). Design needed: opt-in flag vs profile config. |
 
+## Nurture eval — agent-upbringing e2e framework (SHIPPED 2026-07-14)
+Owner-designed frame: onboard a newborn agent (charter/personality/lore seeds),
+run a scripted "conversation kit" through weeks of compressed life (injectable
+clock, capture distillation, retrieval probes = daily rehearsal, nightly
+reflect), assert the memory GROWS UP right. Four properties in
+`eval_nurture{,_test}.go`: IdentityStability (byte-identical after 6 weeks),
+EarnedPermanence (spaced rehearsal → ltm), GracefulForgetting (one-offs decay,
+sensory dies), CorrectionWins (day-14 correction outranks the stale fact).
+All green on the current stack — and the first run already caught two things:
+- **Supersede entity gap (real, documented in TestEvalNurtureSupersedeFired)**:
+  corrections over common-noun facts never fire detectSupersede (needs shared
+  NAMED entities) — 0 contradicts edges, stale fact keeps full importance.
+  Fix: distinctive-term-overlap fallback; assert the diagnostic test then.
+- **Unrehearsed corrections fade below the score floor within ~4 weeks** on
+  the FTS-only path (paraphrase queries can't reach them; term queries can).
+  The embedded/reranked variant of this kit (GHOST_PERSONAL_EMBED pattern)
+  is the eval to build before tuning correction-memory ranking (#12).
+Phase 2 (queued): LLM-at-edge parent-agent harness — a real model plays the
+parent running onboarding + freeform growth conversations against a live shell
+agent, judged on behavior (does Nova ACT like Nova at week 6?); reuses these
+same four assertions as the rubric. Shell-side, cost-gated like e2e_bench.
+
 ## Retrieval-quality findings (2026-07-13/14 live-query reviews)
 - **Graded relevance + relevance gate SHIPPED (eval-first)**: the flat "any FTS match = 0.5 relevance" let recency float topically-empty filler over the floor. New: term-match-graded relevance (CJK-aware) + a gate that scales the composite down when relevance <0.45 — recency/importance are tie-breakers among relevant candidates, not substitutes. Proven by the new `flooding` eval slice: pre-fix FAIL (4 injected for a novel topic), post-fix 14/14. Side-win: freshness-update slice 0.14→**1.00** (fresh fact finally rank-0); personal meanMRR 0.790→**0.821**.
 - **NEXT EVAL CASE (defined by the live review, not yet modeled)**: vector-path flooding — live memories carry embeddings, and weak-but-real cosine (~0.3–0.45 semantic adjacency: meal memos vs a supplement question) bypasses the term-grading path. The FTS-only eval cannot see this; the embedded personal-eval variant (GHOST_PERSONAL_EMBED=1) needs a flooding scenario, then the gate curve gets tuned against it. This is the eval-catches-next-improvement loop working as designed.
