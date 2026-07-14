@@ -29,16 +29,31 @@ queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency
    attacks on always-loaded memory blocked by `locked`). Shell-side remaining:
    tag its ~35 identity keys (pin+lock charter), grouping/render/hash,
    lore-overflow via `ghost consolidate`.
-2. **Vision memory Phase 1** (shell-side, parallel track — no ghost-repo conflict):
-   ghost_put media-notes with FileRef + caption template. Biggest visible gap for
-   the heaviest user; near-zero cost since captions already exist at turn time.
-3. **#7 vector-path flooding**: embedded flooding eval scenario first, then the
-   query-relative/hybrid gate tuned against it. Confirmed on live traffic nightly;
-   damage bounded (extra injected filler), hence third not first.
-4. **Identity layers — feature half** (asks 3, 4, 5: pinned budget with
-   consolidate-on-overflow, per-layer render+hash, promotion proposals).
-5. **Shell consolidation contract**: digests born with `contains` edges (routes
-   shell consolidation through ghost consolidate); piggybacks on identity work.
+2. **Vision memory Phase 1 — SHIPPED (shell 073a2e5, 2026-07-14, deployed)**:
+   media-notes now write ghost memories (episodic, stm, chat+media+photo tags,
+   FileParam refs to archived images) at the bridge capture point; caption
+   template densified (subject/scene/visible text/people/event). Photos are
+   retrievable through the full memory stack. Monitor via agentic review on
+   photo turns; Phases 2–3 (SigLIP cross-modal, EXIF filters) stay queued below.
+3. **Lifecycle quality (owner-framed 2026-07-14): ghost's identity contribution
+   IS the pipeline.** Promotion/demotion/consolidation done carefully, behind
+   the now-safe pinned/locked floor: (a) promotion-signal quality — cluster
+   stability over time, not just size (TESSERA "repeated states": is the
+   pattern recurring across weeks?); (b) demotion care — decay respecting
+   proven utility (ease shipped; measure it on real access logs); (c) shell
+   consolidation contract — digests born with `contains` edges; (d) surface
+   these as consumable signals (clusters/edge-weights/candidates) for shell's
+   promotion judgment. Eval: lifecycle (FAMA) extensions + access-log ACT-R
+   re-match once logs mature.
+4. **Store-integrity asks from shell wiring (2026-07-14)**: (a) **version
+   handshake** — a stale ghost binary bypassed lock enforcement (library-level)
+   against a newer-contract DB; store a contract version (user_version), old
+   binaries refuse writes when DB is newer. (b) **Gate RemoveTag/RenameTag** on
+   `locked` (tag removal currently un-gated — the one bypass left). (c) FTS
+   trigger migration SHIPPED (see below).
+5. **#7 vector-path flooding**: embedded flooding eval scenario first, then the
+   query-relative/hybrid gate tuned against it. Confirmed on live traffic
+   nightly; damage bounded (extra injected filler).
 6. **#4 compaction_suggested threshold** — cheap fix, kills the ~183/day reflect
    storm pressure.
 7. **#9/#10 query quality** (shell-side distilled chat-arm query; distinctiveness-

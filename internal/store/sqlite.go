@@ -250,6 +250,35 @@ func (s *SQLiteStore) migrate() error {
 		s.db.Exec(`INSERT INTO chunks_fts(rowid, text) SELECT rowid, cjk_segment(text) FROM chunks`)
 	}
 
+	// Phase 14: recreate stale FTS triggers. CREATE TRIGGER IF NOT EXISTS never
+	// replaces, so DBs from before the standalone-bigram rebuild kept trigger
+	// bodies that (a) use the external-content 'delete' command — an SQL error
+	// on the standalone table, silently breaking every chunk DELETE/UPDATE and
+	// therefore expired-chunk GC — and (b) index new text without cjk_segment,
+	// leaving new CJK content invisible to FTS. Found live in the agent DBs by
+	// the shell wiring session (2026-07-14). Detect stale DDL, recreate, and
+	// reindex (rows inserted by the stale trigger lack bigram segmentation).
+	var adDDL, aiDDL string
+	s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name='chunks_ad'`).Scan(&adDDL)
+	s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name='chunks_ai'`).Scan(&aiDDL)
+	if (adDDL != "" && strings.Contains(adDDL, "'delete'")) || (aiDDL != "" && !strings.Contains(aiDDL, "cjk_segment")) {
+		s.db.Exec(`DROP TRIGGER IF EXISTS chunks_ai`)
+		s.db.Exec(`DROP TRIGGER IF EXISTS chunks_ad`)
+		s.db.Exec(`DROP TRIGGER IF EXISTS chunks_au`)
+		s.db.Exec(`CREATE TRIGGER chunks_ai AFTER INSERT ON chunks BEGIN
+			INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, cjk_segment(new.text));
+		END`)
+		s.db.Exec(`CREATE TRIGGER chunks_ad AFTER DELETE ON chunks BEGIN
+			DELETE FROM chunks_fts WHERE rowid = old.rowid;
+		END`)
+		s.db.Exec(`CREATE TRIGGER chunks_au AFTER UPDATE ON chunks BEGIN
+			DELETE FROM chunks_fts WHERE rowid = old.rowid;
+			INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, cjk_segment(new.text));
+		END`)
+		s.db.Exec(`DELETE FROM chunks_fts`)
+		s.db.Exec(`INSERT INTO chunks_fts(rowid, text) SELECT rowid, cjk_segment(text) FROM chunks`)
+	}
+
 	// Phase 4: pinned column for chronic accessibility (replaces tier=identity)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`)
 	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memories_pinned ON memories(pinned)`)
