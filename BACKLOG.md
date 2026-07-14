@@ -36,6 +36,19 @@ Constraints: LLM-free; validate against halumem/longmemeval/e2e + the in-repo ba
 
 Note the design synergy: (3) is packing substitution applied to the pinned snapshot; (5) is the reflect/cluster machinery emitting artifacts; (2)/(6) extend the supersede/versioning model. Most primitives shipped this weekend — this workstream is largely composition + policy enforcement.
 
+## QUEUED: Vision memory — photos as first-class memories (design reviewed 2026-07-14)
+Owner use case: image-first conversations (~60 image-referencing replies/month, multi-day photo troubleshooting threads); today photo content survives only as whatever text the agent happened to write ("(photo)" exchanges). Shell V2-H19 increments 1–3 already shipped (archive + ledger + [media-note] descriptions + Channel B) — **the missing link is ghost-side**.
+
+**Phase 1 — connect the pipes (small, high value, no new models):** shell `ghost_put`s each media-note as a memory (kind episodic, chat tag, `FileRef` → archived photo path — FileRef already exists in the model) with a documented dense-caption template (subject, scene, text-in-image, people-as-named, event context) + EXIF timestamp. The VLM already sees the image at turn time — captions cost zero extra inference. Photos instantly become searchable through the full tuned stack (graded relevance, rerank, CJK). This is Mem0's production pattern with a better caption author. Research: captions WIN for personal-event recall (Visual Lifelog Retrieval, arXiv 2510.04010).
+
+**Phase 2 — true cross-modal (ghost, ahead of the field):** SigLIP2-base-patch16-224 q8 ONNX (vision+text towers, dim 768, ~100ms/image CPU ingest) via hugot's `WithImageMode()` (already in our hugot version). Image vectors in the existing blob codec **with a new version byte tagging the embedding space** (0x02 = siglip — cross-space cosine silently corrupts otherwise); query-time: SigLIP text tower (NOT MiniLM — different space) → fourth retrieval channel fused via RRF. Nobody in the Letta/Mem0/Zep class does local cross-modal today. Research: embeddings win visual queries (~72% R@10, PhotoBench arXiv 2603.01493) but collapse on metadata queries — hence:
+
+**Phase 3 — structured filters + rejection:** EXIF time/GPS as query filters (PhotoBench: pure embeddings lose 50–60pts there), calibrated no-result floor (users misremember), thumbnails (~256px WebP, in-DB blob <30KB) for context display + original-loss survival. Privacy: originals stay outside the DB; `ghost export` ships refs+captions+thumbs only by default; GPS excluded from default context render.
+
+**Risks (from research):** hugot ImageMode needs a darwin/arm64 smoke test before committing; SigLIP sigmoid scores need calibration (different scale from cosine); pin fixed-res checkpoint (NaFlex variant does not export to ONNX). **Eval:** PhotoBench as the external bench candidate; photo-recall cases in the personal eval + the agentic review ("that thing I photographed last month").
+
+Ordering: Phase 1 can ship independently and immediately (mostly shell + a caption template); Phases 2–3 queue behind identity layers.
+
 ## Review-findings disposition (2026-07-14, owner-directed)
 - **#8 legacy digest class — DONE**: all remaining edge-less auto/exchange-summaries demoted to dormant (44 more on the primary store; class now fully archived). Verified: the collagen-thread query's summary wall replaced by the SR-collagen bulls-eye + live thread exchanges.
 - **#7 vector-path flooding — TUNING INSIGHT (measured)**: absolute cosine CANNOT separate filler from hits in this space — novel-topic filler 0.48–0.62, real topical hits 0.60–0.63 (overlap), real social hits 0.27–0.41 (BELOW filler). Any fixed threshold kills good answers before bad. The gate must be query-relative (distance from the query's own distribution) or hybrid (cosine AND term evidence). Build the embedded flooding eval scenario first, tune against it. Monitoring meanwhile.
