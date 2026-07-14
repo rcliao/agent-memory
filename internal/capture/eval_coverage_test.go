@@ -70,6 +70,10 @@ var coverageCorpus = []coverageCase{
 	// Sentence-initial English entity is discounted by the NER heuristic —
 	// documented gap (entity package change, not capture).
 	{text: "Koda's light flickered again around six this evening.", class: "en-entity", gap: true},
+	// Live-found 2026-07-14 (papi's research directive distilled nothing):
+	// "make sure to" standing instructions and "let's also <verb>" decisions.
+	{text: "Pika make sure to update our daily research with more papers about agent memory.", class: "boundary"},
+	{text: "Better yet let's also store the research findings into our memories.", class: "decision"},
 }
 
 // chatterCorpus must produce ZERO candidates — the false-positive guard.
