@@ -159,10 +159,14 @@ misses never exists downstream. Eval-first plan, measurement SHIPPED:
   primary user's language never matches intent cues (all English word-boundary
   regexes); CJK capture rides only on named entities. Chatter false-positive
   guard = hard zero (EN+CJK). Floors lock in gains; gap flags flip as fixed.
-- **Next ship 1 — pattern widening**: CJK intent cues (比較喜歡/以後/不對/
-  過敏/決定/記得/不要再…) + English gaps (I'd rather / please always / going
-  forward / never share / that's not right / let's go with), each gated by the
-  corpus + zero chatter FPs.
+- **Pattern widening SHIPPED (2026-07-14)**: corpus 14/29 → **29/29** — CJK
+  alternations on every classifier (比較喜歡/以後/不對/過敏/決定/記得/不要再…),
+  English gaps closed (I'd rather / my preference / please always / going
+  forward / that's not right / let's go with / never share / don't send),
+  new `boundary` intent for standing instructions (semantic kind), fact
+  pattern widened to multi-word subjects. Chatter FPs still zero (EN+CJK).
+  Deployed to both daemons — mami's Chinese preferences/corrections/allergies
+  now distill on every turn.
 - **Next ship 2 — write-time triage (assimilate vs accommodate, LLM-free)**:
   classify each incoming candidate against the live store into
   REINFORCE (high distinctive-term/cosine overlap, same polarity → rehearsal

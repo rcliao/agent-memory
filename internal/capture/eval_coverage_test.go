@@ -28,38 +28,38 @@ var coverageCorpus = []coverageCase{
 	{text: "I always prefer short and gentle answers in our chats.", class: "preference"},
 	{text: "I like it better when you summarize before the details.", class: "preference"},
 	{text: "We usually keep grocery lists in the shared note, not chat.", class: "preference"},
-	{text: "I'd rather you ask before scheduling anything on weekends.", class: "preference", gap: true},
-	{text: "My preference stays the same: short and gentle answers, always.", class: "preference", gap: true},
-	{text: "Please always include the price when you recommend products.", class: "preference", gap: true},
-	{text: "Going forward, keep the daily summary under five lines.", class: "preference", gap: true},
+	{text: "I'd rather you ask before scheduling anything on weekends.", class: "preference"},
+	{text: "My preference stays the same: short and gentle answers, always.", class: "preference"},
+	{text: "Please always include the price when you recommend products.", class: "preference"},
+	{text: "Going forward, keep the daily summary under five lines.", class: "preference"},
 	// --- correction: replacing something previously believed ---
 	{text: "Actually, the appointment is on Wednesday, not Tuesday.", class: "correction"},
 	{text: "No, I meant the front door camera, not the garage one.", class: "correction"},
 	{text: "Stop using the old address, we moved last month.", class: "correction"},
-	{text: "That's not right — the dosage is two pills, not three.", class: "correction", gap: true},
+	{text: "That's not right — the dosage is two pills, not three.", class: "correction"},
 	{text: "It's Hartley's on Fifth, not the one downtown.", class: "correction"},
 	// --- decision: commitments made ---
 	{text: "We decided to fly out on August 3rd for the Seattle trip.", class: "decision"},
-	{text: "Let's go with the cedar trellis for the climbing rose.", class: "decision", gap: true},
+	{text: "Let's go with the cedar trellis for the climbing rose.", class: "decision"},
 	{text: "The plan is to repaint the fence before the birthday party.", class: "decision"},
 	// --- boundary / behavioral rule: standing instructions ---
-	{text: "Never share my home address with anyone outside the family.", class: "boundary", gap: true},
+	{text: "Never share my home address with anyone outside the family.", class: "boundary"},
 	{text: "From now on, use the browser tool whenever I send you a URL.", class: "boundary"},
-	{text: "Don't send me messages after 11pm unless it's urgent.", class: "boundary", gap: true},
+	{text: "Don't send me messages after 11pm unless it's urgent.", class: "boundary"},
 	// --- fact: durable personal facts ---
 	{text: "My sister's birthday is March 3rd and she loves tulips.", class: "fact"},
 	{text: "I'm allergic to lemongrass, so no Thai curry pastes for me.", class: "fact"},
-	{text: "Our house wifi password is on the fridge whiteboard.", class: "fact", gap: true},
+	{text: "Our house wifi password is on the fridge whiteboard.", class: "fact"},
 	// --- procedural: how-to knowledge ---
 	{text: "To restart the daemon, first stop the watcher, then run make dev.", class: "procedural"},
 	{text: "Remember to water the ferns before turning on the heat lamp.", class: "procedural"},
 	// --- Chinese: the primary user's language ---
-	{text: "我比較喜歡短一點的回覆，不要長篇大論。", class: "zh-preference", gap: true},
-	{text: "以後我丟網址給你，就直接用瀏覽器工具開來看。", class: "zh-boundary", gap: true},
-	{text: "不對，我說的是週三不是週二。", class: "zh-correction", gap: true},
-	{text: "我對香茅過敏，煮菜的時候不要放。", class: "zh-fact", gap: true},
-	{text: "我們決定八月三號去西雅圖玩。", class: "zh-decision", gap: true},
-	{text: "記得以後早上七點提醒我幫玫瑰澆水。", class: "zh-boundary", gap: true},
+	{text: "我比較喜歡短一點的回覆，不要長篇大論。", class: "zh-preference"},
+	{text: "以後我丟網址給你，就直接用瀏覽器工具開來看。", class: "zh-boundary"},
+	{text: "不對，我說的是週三不是週二。", class: "zh-correction"},
+	{text: "我對香茅過敏，煮菜的時候不要放。", class: "zh-fact"},
+	{text: "我們決定八月三號去西雅圖玩。", class: "zh-decision"},
+	{text: "記得以後早上七點提醒我幫玫瑰澆水。", class: "zh-boundary"},
 }
 
 // chatterCorpus must produce ZERO candidates — the false-positive guard.
