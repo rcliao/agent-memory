@@ -18,16 +18,16 @@ import (
 // Each entry contains a question, expected answer, timestamped chat sessions (haystack),
 // and ground-truth session IDs that contain evidence for the answer.
 type LongMemEvalEntry struct {
-	QuestionID       string           `json:"question_id"`
-	QuestionType     string           `json:"question_type"`
-	Question         string           `json:"question"`
-	RawAnswer        json.RawMessage  `json:"answer"`
-	Answer           string           `json:"-"` // populated after unmarshal
-	QuestionDate     string           `json:"question_date"`
-	HaystackIDs      []string         `json:"haystack_session_ids"`
-	HaystackDates    []string         `json:"haystack_dates"`
-	HaystackSessions [][]LMETurn      `json:"haystack_sessions"`
-	AnswerSessionIDs []string         `json:"answer_session_ids"`
+	QuestionID       string          `json:"question_id"`
+	QuestionType     string          `json:"question_type"`
+	Question         string          `json:"question"`
+	RawAnswer        json.RawMessage `json:"answer"`
+	Answer           string          `json:"-"` // populated after unmarshal
+	QuestionDate     string          `json:"question_date"`
+	HaystackIDs      []string        `json:"haystack_session_ids"`
+	HaystackDates    []string        `json:"haystack_dates"`
+	HaystackSessions [][]LMETurn     `json:"haystack_sessions"`
+	AnswerSessionIDs []string        `json:"answer_session_ids"`
 }
 
 // LMETurn represents a single turn in a chat session.
@@ -41,14 +41,14 @@ type LMETurn struct {
 
 // LongMemEvalConfig controls the benchmark run.
 type LongMemEvalConfig struct {
-	DatasetPath    string // path to the JSON file
-	Limit          int    // max questions to evaluate (0 = all)
-	PerTypeLimit   int    // max questions per type for stratified sampling (0 = no limit)
-	TopK           []int  // K values for metrics (default: [5, 10])
-	NS             string // namespace for memories (default: "bench:longmemeval")
-	EmbedCachePath string // path to embedding cache file (speeds up repeated runs)
-	UseContext     bool   // if true, use Context() instead of Search()
-	ExpandEdges    bool   // if true, build graph edges at ingest and expand during search
+	DatasetPath    string                // path to the JSON file
+	Limit          int                   // max questions to evaluate (0 = all)
+	PerTypeLimit   int                   // max questions per type for stratified sampling (0 = no limit)
+	TopK           []int                 // K values for metrics (default: [5, 10])
+	NS             string                // namespace for memories (default: "bench:longmemeval")
+	EmbedCachePath string                // path to embedding cache file (speeds up repeated runs)
+	UseContext     bool                  // if true, use Context() instead of Search()
+	ExpandEdges    bool                  // if true, build graph edges at ingest and expand during search
 	ProgressFunc   func(done, total int) // optional progress callback
 }
 
@@ -65,12 +65,12 @@ type LongMemEvalResult struct {
 
 // LongMemEvalReport holds the aggregate benchmark results.
 type LongMemEvalReport struct {
-	Timestamp   time.Time                       `json:"timestamp"`
-	Dataset     string                          `json:"dataset"`
-	Total       int                             `json:"total"`
-	ByType      map[string]*LongMemEvalTypeAgg  `json:"by_type"`
-	Overall     map[string]float64              `json:"overall"`
-	Results     []LongMemEvalResult             `json:"results"`
+	Timestamp time.Time                      `json:"timestamp"`
+	Dataset   string                         `json:"dataset"`
+	Total     int                            `json:"total"`
+	ByType    map[string]*LongMemEvalTypeAgg `json:"by_type"`
+	Overall   map[string]float64             `json:"overall"`
+	Results   []LongMemEvalResult            `json:"results"`
 }
 
 // LongMemEvalTypeAgg aggregates metrics for a question type.
@@ -310,11 +310,11 @@ func RunLongMemEval(cfg LongMemEvalConfig, newStore func() (*SQLiteStore, func()
 		var retrieved []string
 		if cfg.UseContext {
 			ctxResult, err := store.Context(ctx, ContextParams{
-				NS:            cfg.NS,
-				Query:         entry.Question,
-				Budget:        100000, // large budget to avoid truncation
+				NS:              cfg.NS,
+				Query:           entry.Question,
+				Budget:          100000, // large budget to avoid truncation
 				MaxMemoryTokens: 10000,
-				ExcludePinned: true,
+				ExcludePinned:   true,
 			})
 			if err != nil {
 				cleanup()

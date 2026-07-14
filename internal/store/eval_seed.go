@@ -9,11 +9,11 @@ import (
 // SeedMemory describes a memory to be seeded for eval benchmarks.
 type SeedMemory struct {
 	NS, Key, Content, Kind, Tier, Priority string
-	Pinned        bool    // always loaded in context, exempt from decay
-	Importance    float64
-	BackdateHours int // set created_at to N hours ago via raw SQL
-	AccessCount   int // override access_count via raw SQL
-	UtilityCount  int // override utility_count via raw SQL
+	Pinned                                 bool // always loaded in context, exempt from decay
+	Importance                             float64
+	BackdateHours                          int // set created_at to N hours ago via raw SQL
+	AccessCount                            int // override access_count via raw SQL
+	UtilityCount                           int // override utility_count via raw SQL
 }
 
 // DefaultSeedCorpus returns ~35 memories modeling a realistic agent memory store.
@@ -136,7 +136,7 @@ func DefaultSeedCorpus() []SeedMemory {
 		{
 			NS: "project:alpha", Key: "perf-incident-jan", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.55,
 			BackdateHours: 720,
-			Content: "2024-01-10 outage: connection pool exhaustion under load spike. Root cause was missing statement_timeout on long-running analytics queries bleeding into the primary pool.",
+			Content:       "2024-01-10 outage: connection pool exhaustion under load spike. Root cause was missing statement_timeout on long-running analytics queries bleeding into the primary pool.",
 		},
 		{
 			NS: "project:alpha", Key: "perf-incident-mar", Kind: "episodic", Tier: "stm", Priority: "high", Importance: 0.75,
@@ -169,7 +169,7 @@ func DefaultSeedCorpus() []SeedMemory {
 		{
 			NS: "project:beta", Key: "beta-pool-incident", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.4,
 			BackdateHours: 360,
-			Content: "Connection pool exhaustion in the inference service caused cascading timeouts. Similar symptoms to database pool issues but this was HTTP client pools not database.",
+			Content:       "Connection pool exhaustion in the inference service caused cascading timeouts. Similar symptoms to database pool issues but this was HTTP client pools not database.",
 		},
 
 		// ══════════════════════════════════════════════════════════════
@@ -221,7 +221,7 @@ func DefaultSeedCorpus() []SeedMemory {
 		{
 			NS: "project:alpha", Key: "dormant-old-deploy-process", Kind: "procedural", Tier: "dormant", Priority: "normal", Importance: 0.5,
 			BackdateHours: 480,
-			Content: "Old deployment process: manually SSH into production server, pull latest code from git, run database migrations, restart the application service. Replaced by ArgoCD pipeline.",
+			Content:       "Old deployment process: manually SSH into production server, pull latest code from git, run database migrations, restart the application service. Replaced by ArgoCD pipeline.",
 		},
 
 		// ══════════════════════════════════════════════════════════════
@@ -265,17 +265,17 @@ func DefaultSeedCorpus() []SeedMemory {
 		{
 			NS: "project:alpha", Key: "deploy-yesterday", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.6,
 			BackdateHours: 18,
-			Content: "Deployed v2.4.1 to production yesterday. Changes: added rate limit headers to Atlas responses, bumped Go to 1.22.1, fixed flaky e2e test in signup flow.",
+			Content:       "Deployed v2.4.1 to production yesterday. Changes: added rate limit headers to Atlas responses, bumped Go to 1.22.1, fixed flaky e2e test in signup flow.",
 		},
 		{
 			NS: "project:alpha", Key: "deploy-last-week", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.55,
 			BackdateHours: 168,
-			Content: "Deployed v2.4.0 to production last week. Changes: migrated auth tokens from symmetric to asymmetric signing (RS256), added PgBouncer health check endpoint.",
+			Content:       "Deployed v2.4.0 to production last week. Changes: migrated auth tokens from symmetric to asymmetric signing (RS256), added PgBouncer health check endpoint.",
 		},
 		{
 			NS: "project:alpha", Key: "deploy-last-month", Kind: "episodic", Tier: "stm", Priority: "low", Importance: 0.4,
 			BackdateHours: 720,
-			Content: "Deployed v2.3.0 to production last month. Changes: initial pgvector integration, search service extracted from monolith, new Grafana dashboards.",
+			Content:       "Deployed v2.3.0 to production last month. Changes: initial pgvector integration, search service extracted from monolith, new Grafana dashboards.",
 		},
 
 		// ══════════════════════════════════════════════════════════════

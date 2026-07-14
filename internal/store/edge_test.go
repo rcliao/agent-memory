@@ -282,8 +282,8 @@ func TestEdgeExpansionInContext(t *testing.T) {
 	// Query for "authentication" — should find auth-overview directly,
 	// and jwt-rotation via edge expansion
 	result, err := s.Context(ctx, ContextParams{
-		NS:    "test",
-		Query: "authentication",
+		NS:     "test",
+		Query:  "authentication",
 		Budget: 4000,
 	})
 	if err != nil {
@@ -328,8 +328,8 @@ func TestEdgeExpansionBoostCap(t *testing.T) {
 	}
 
 	result, err := s.Context(ctx, ContextParams{
-		NS:    "test",
-		Query: "seed memory about hub",
+		NS:     "test",
+		Query:  "seed memory about hub",
 		Budget: 10000,
 	})
 	if err != nil {
@@ -524,8 +524,8 @@ func TestContradictsForceInclude(t *testing.T) {
 
 	// Context query should find rule-v1 via search and force-include rule-v2 via contradicts edge
 	result, err := s.Context(ctx, ContextParams{
-		NS:    "test",
-		Query: "authentication session",
+		NS:     "test",
+		Query:  "authentication session",
 		Budget: 4000,
 	})
 	if err != nil {
@@ -595,8 +595,8 @@ func TestContainsSuppression(t *testing.T) {
 
 	// Context should prefer the summary and suppress children
 	result, err := s.Context(ctx, ContextParams{
-		NS:    "test",
-		Query: "authentication JWT",
+		NS:     "test",
+		Query:  "authentication JWT",
 		Budget: 4000,
 	})
 	if err != nil {

@@ -42,40 +42,40 @@ type LoCoMoQA struct {
 // LoCoMoConfig controls the benchmark run.
 type LoCoMoConfig struct {
 	DatasetPath    string
-	Limit          int    // max QA pairs to evaluate (0 = all)
-	PerCatLimit    int    // max QA per category (0 = no limit)
+	Limit          int // max QA pairs to evaluate (0 = all)
+	PerCatLimit    int // max QA per category (0 = no limit)
 	TopK           []int
 	NS             string
 	EmbedCachePath string
-	ExpandEdges    bool // if true, build entity edges and expand during search
-	MultiQuery     bool // if true, decompose complex queries into sub-queries
-	PRF            bool // if true, run pseudo-relevance feedback for multi-hop
-	MMR            bool // if true, diversify top results via MMR
+	ExpandEdges    bool   // if true, build entity edges and expand during search
+	MultiQuery     bool   // if true, decompose complex queries into sub-queries
+	PRF            bool   // if true, run pseudo-relevance feedback for multi-hop
+	MMR            bool   // if true, diversify top results via MMR
 	CatFilter      string // if non-empty, only evaluate this category name (e.g. "multi-hop")
 	ProgressFunc   func(done, total int)
 }
 
 // LoCoMoReport holds aggregate benchmark results.
 type LoCoMoReport struct {
-	Timestamp time.Time                       `json:"timestamp"`
-	Dataset   string                          `json:"dataset"`
-	Total     int                             `json:"total"`
-	ByCat     map[string]*LongMemEvalTypeAgg  `json:"by_category"` // reuse type agg
-	Overall   map[string]float64              `json:"overall"`
-	Results   []LoCoMoResult                  `json:"results,omitempty"`
+	Timestamp time.Time                      `json:"timestamp"`
+	Dataset   string                         `json:"dataset"`
+	Total     int                            `json:"total"`
+	ByCat     map[string]*LongMemEvalTypeAgg `json:"by_category"` // reuse type agg
+	Overall   map[string]float64             `json:"overall"`
+	Results   []LoCoMoResult                 `json:"results,omitempty"`
 }
 
 // LoCoMoResult holds per-question retrieval outcome for offline analysis.
 type LoCoMoResult struct {
-	SampleID     string             `json:"sample_id"`
-	Category     string             `json:"category"`
-	Question     string             `json:"question"`
-	Answer       string             `json:"answer,omitempty"`
-	Evidence     []string           `json:"evidence"`      // raw dia_ids
-	Relevant     []string           `json:"relevant"`      // session keys
-	Retrieved    []string           `json:"retrieved"`     // top session keys (max 20)
-	GoldRank     int                `json:"gold_rank"`     // 1-based rank of first relevant, 0 if not found
-	Metrics      map[string]float64 `json:"metrics"`
+	SampleID  string             `json:"sample_id"`
+	Category  string             `json:"category"`
+	Question  string             `json:"question"`
+	Answer    string             `json:"answer,omitempty"`
+	Evidence  []string           `json:"evidence"`  // raw dia_ids
+	Relevant  []string           `json:"relevant"`  // session keys
+	Retrieved []string           `json:"retrieved"` // top session keys (max 20)
+	GoldRank  int                `json:"gold_rank"` // 1-based rank of first relevant, 0 if not found
+	Metrics   map[string]float64 `json:"metrics"`
 }
 
 var diaIDRe = regexp.MustCompile(`^D(\d+):(\d+)$`)

@@ -35,11 +35,11 @@ type E2EConfig struct {
 	DatasetPath  string
 	Limit        int
 	PerTypeLimit int
-	TopK         int    // number of memories to retrieve (default 5)
+	TopK         int // number of memories to retrieve (default 5)
 	NS           string
 	LLM          LLMClient
-	Modes        []string // subset of: "no-memory", "ghost", "ghost-hyde", "ghost-rewrite", "oracle"
-	LLMJudge     bool     // if true, use LLM-as-judge scoring (correct=1, partial=0.5, wrong=0)
+	Modes        []string  // subset of: "no-memory", "ghost", "ghost-hyde", "ghost-rewrite", "oracle"
+	LLMJudge     bool      // if true, use LLM-as-judge scoring (correct=1, partial=0.5, wrong=0)
 	Judge        LLMClient // judge LLM (defaults to LLM if unset)
 	ProgressFunc func(done, total int)
 }

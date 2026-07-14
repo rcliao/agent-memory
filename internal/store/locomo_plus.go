@@ -51,9 +51,9 @@ type LoCoMoPlusConfig struct {
 	MultiQuery     bool
 	// LLM-assisted retrieval: transform trigger query via LLM before searching.
 	// Ghost itself remains LLM-free — LLM runs in the benchmark orchestrator.
-	LLMHyde    bool      // if true, LLM writes hypothetical answer as search query
-	LLMRewrite bool      // if true, LLM rewrites query with synonyms/concepts
-	LLM        LLMClient // client used when LLMHyde or LLMRewrite is true
+	LLMHyde      bool      // if true, LLM writes hypothetical answer as search query
+	LLMRewrite   bool      // if true, LLM rewrites query with synonyms/concepts
+	LLM          LLMClient // client used when LLMHyde or LLMRewrite is true
 	ProgressFunc func(done, total int)
 }
 

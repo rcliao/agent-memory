@@ -27,28 +27,28 @@ type InferLLMClient interface {
 
 // InferEdgesParams controls reasoning edge inference.
 type InferEdgesParams struct {
-	NS       string          // namespace to scan
-	LLM      InferLLMClient  // LLM to classify relationships
-	MaxPairs int             // max candidate pairs to examine (default 100)
-	Seed     []string        // optional: only scan pairs involving these memory keys
-	DryRun   bool            // if true, return what would be created without writing
+	NS       string         // namespace to scan
+	LLM      InferLLMClient // LLM to classify relationships
+	MaxPairs int            // max candidate pairs to examine (default 100)
+	Seed     []string       // optional: only scan pairs involving these memory keys
+	DryRun   bool           // if true, return what would be created without writing
 }
 
 // InferredEdge is a single edge proposed by the LLM.
 type InferredEdge struct {
-	FromKey string  `json:"from_key"`
-	ToKey   string  `json:"to_key"`
-	Rel     string  `json:"rel"`
-	Reason  string  `json:"reason,omitempty"`
-	Applied bool    `json:"applied"`
+	FromKey string `json:"from_key"`
+	ToKey   string `json:"to_key"`
+	Rel     string `json:"rel"`
+	Reason  string `json:"reason,omitempty"`
+	Applied bool   `json:"applied"`
 }
 
 // InferResult summarizes an inference run.
 type InferResult struct {
-	PairsExamined int             `json:"pairs_examined"`
-	EdgesCreated  int             `json:"edges_created"`
-	EdgesSkipped  int             `json:"edges_skipped"` // already exist
-	Inferences    []InferredEdge  `json:"inferences"`
+	PairsExamined int            `json:"pairs_examined"`
+	EdgesCreated  int            `json:"edges_created"`
+	EdgesSkipped  int            `json:"edges_skipped"` // already exist
+	Inferences    []InferredEdge `json:"inferences"`
 }
 
 // ReasoningCandidatesParams filters which relates_to pairs to surface for
@@ -63,11 +63,11 @@ type ReasoningCandidatesParams struct {
 // so an LLM agent can classify whether a caused_by / prevents / implies edge
 // should replace or augment the relates_to link.
 type ReasoningCandidate struct {
-	FromKey        string  `json:"from_key"`
-	FromContent    string  `json:"from_content"`
-	ToKey          string  `json:"to_key"`
-	ToContent      string  `json:"to_content"`
-	RelatesWeight  float64 `json:"relates_weight"`
+	FromKey       string  `json:"from_key"`
+	FromContent   string  `json:"from_content"`
+	ToKey         string  `json:"to_key"`
+	ToContent     string  `json:"to_content"`
+	RelatesWeight float64 `json:"relates_weight"`
 }
 
 // ReasoningCandidatesResult is returned by ListReasoningCandidates.

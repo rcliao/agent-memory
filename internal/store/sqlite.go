@@ -54,6 +54,7 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
+	registerCJKSegmentUDF()
 	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)")
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
@@ -150,8 +151,6 @@ func (s *SQLiteStore) migrate() error {
 
 	CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
 		text,
-		content=chunks,
-		content_rowid=rowid,
 		tokenize='porter unicode61'
 	);
 	`
@@ -207,18 +206,18 @@ func (s *SQLiteStore) migrate() error {
 
 	// FTS5 triggers for automatic sync
 	s.db.Exec(`CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
-		INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+		INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, cjk_segment(new.text));
 	END`)
 	s.db.Exec(`CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
-		INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+		DELETE FROM chunks_fts WHERE rowid = old.rowid;
 	END`)
 	s.db.Exec(`CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
-		INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
-		INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+		DELETE FROM chunks_fts WHERE rowid = old.rowid;
+		INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, cjk_segment(new.text));
 	END`)
 
 	// Backfill FTS for any existing chunks not yet indexed
-	s.db.Exec(`INSERT OR IGNORE INTO chunks_fts(rowid, text) SELECT rowid, text FROM chunks`)
+	s.db.Exec(`INSERT OR IGNORE INTO chunks_fts(rowid, text) SELECT rowid, cjk_segment(text) FROM chunks`)
 
 	// Phase 11: porter stemming for FTS. Pre-existing DBs built chunks_fts
 	// with the default unicode61 tokenizer, so "deploys"/"deployed" never
@@ -237,15 +236,18 @@ func (s *SQLiteStore) migrate() error {
 	var ftsSQL string
 	if err := s.db.QueryRow(
 		`SELECT sql FROM sqlite_master WHERE name = 'chunks_fts'`).Scan(&ftsSQL); err == nil &&
-		!strings.Contains(ftsSQL, "porter") {
+		(!strings.Contains(ftsSQL, "porter") || strings.Contains(ftsSQL, "content=chunks")) {
+		// Phase 13 unifies with Phase 11: the FTS index is standalone
+		// (stores cjk_segment-ed text — CJK runs as overlapping bigrams so
+		// Chinese terms are matchable; see cjk.go) with porter for English
+		// stemming. Old DBs (unicode61 external-content, or porter
+		// external-content from Phase 11) are rebuilt once from chunks.
 		s.db.Exec(`DROP TABLE chunks_fts`)
 		s.db.Exec(`CREATE VIRTUAL TABLE chunks_fts USING fts5(
 			text,
-			content=chunks,
-			content_rowid=rowid,
 			tokenize='porter unicode61'
 		)`)
-		s.db.Exec(`INSERT INTO chunks_fts(rowid, text) SELECT rowid, text FROM chunks`)
+		s.db.Exec(`INSERT INTO chunks_fts(rowid, text) SELECT rowid, cjk_segment(text) FROM chunks`)
 	}
 
 	// Phase 4: pinned column for chronic accessibility (replaces tier=identity)

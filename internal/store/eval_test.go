@@ -995,7 +995,7 @@ func TestEvalReflectRuleThresholds(t *testing.T) {
 		mem, err := s.Put(ctx, PutParams{
 			NS: "project:test", Key: "should-not-promote",
 			Content: "Memory with moderate access that should stay in STM.",
-			Kind: "semantic", Priority: "normal", Importance: 0.6,
+			Kind:    "semantic", Priority: "normal", Importance: 0.6,
 		})
 		if err != nil {
 			t.Fatalf("put: %v", err)
@@ -1019,7 +1019,7 @@ func TestEvalReflectRuleThresholds(t *testing.T) {
 		mem, err := s.Put(ctx, PutParams{
 			NS: "project:test", Key: "should-decay",
 			Content: "STM memory that should decay due to low access relative to threshold.",
-			Kind: "semantic", Priority: "normal", Importance: 0.8,
+			Kind:    "semantic", Priority: "normal", Importance: 0.8,
 		})
 		if err != nil {
 			t.Fatalf("put: %v", err)
@@ -1047,7 +1047,7 @@ func TestEvalReflectRuleThresholds(t *testing.T) {
 		mem, err := s.Put(ctx, PutParams{
 			NS: "project:test", Key: "stale-ltm-high-access",
 			Content: "LTM memory accessed many times historically but not recently.",
-			Kind: "semantic", Priority: "normal", Importance: 0.7, Tier: "ltm",
+			Kind:    "semantic", Priority: "normal", Importance: 0.7, Tier: "ltm",
 		})
 		if err != nil {
 			t.Fatalf("put: %v", err)
@@ -1070,7 +1070,7 @@ func TestEvalReflectRuleThresholds(t *testing.T) {
 		mem, err := s.Put(ctx, PutParams{
 			NS: "project:test", Key: "active-ltm",
 			Content: "LTM memory that was accessed recently and should stay.",
-			Kind: "semantic", Priority: "normal", Importance: 0.7, Tier: "ltm",
+			Kind:    "semantic", Priority: "normal", Importance: 0.7, Tier: "ltm",
 		})
 		if err != nil {
 			t.Fatalf("put: %v", err)
@@ -1525,11 +1525,11 @@ func TestEvalNegation(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name       string
-		query      string
-		wantKeys   []string // memories that answer the question (even if answer is "no")
-		notKeys    []string // memories that would be false positives
-		topK       int
+		name     string
+		query    string
+		wantKeys []string // memories that answer the question (even if answer is "no")
+		notKeys  []string // memories that would be false positives
+		topK     int
 	}{
 		{
 			// "do we use Redis?" — should find no-redis, not data-layer (PostgreSQL)
@@ -1679,8 +1679,8 @@ func TestEvalScale(t *testing.T) {
 		// Core signal queries should still find the right memories
 		// even with 500+ noise memories
 		cases := []struct {
-			query    string
-			wantKey  string
+			query   string
+			wantKey string
 		}{
 			{"PostgreSQL pgvector connection pooling", "data-layer"},
 			{"JWT refresh token authentication", "auth-flow"},
@@ -1795,9 +1795,9 @@ func TestEvalReport(t *testing.T) {
 
 	// ── Hot path: Layer 1 (SystemPrompt via List) ──
 	hotListCases := []struct {
-		name       string
-		namespaces []string
-		charBudget int
+		name        string
+		namespaces  []string
+		charBudget  int
 		mustContain []string
 	}{
 		{"hot/list/identity_loaded", []string{"user:prefs"}, 8000,
@@ -1877,8 +1877,8 @@ func TestEvalReport(t *testing.T) {
 	// ── Cold path (search) ──
 	type searchCase struct {
 		name, difficulty, query, ns string
-		wantKeys, notKeys          []string
-		topK                       int
+		wantKeys, notKeys           []string
+		topK                        int
 	}
 	searchCases := []searchCase{
 		{"cold/keyword/postgresql", "keyword", "PostgreSQL pgvector", "", []string{"data-layer"}, nil, 3},
