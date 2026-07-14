@@ -22,6 +22,20 @@ repo's own measured findings. Statuses: `open | in-progress | done`.
 - **CJK FTS gap (real, measured)**: unicode61 tokenizes contiguous CJK runs as single tokens — 拖鞋 present in 7 chunks matches 0 in FTS (only punctuation-delimited terms like 鴻禧菇 index standalone, 185/197). Chinese recall currently rides the LIKE + vector channels; LIKE has no term scoring (created_at order only). **Next measured experiment: trigram-tokenized FTS** (index size + English-behavior tradeoffs need the full eval battery + latency bench).
 - Chat-scoped arm floods topic-divergent queries with the chat's dominant content class (meal memos); cross arm carries the topical answers. Structural improvement candidates: per-arm retrieval policy in shell, or topic-gate on the chat arm.
 
+## NEXT UP: Identity layers — charter / personality / lore as first-class memory (handoff 2026-07-13)
+Source: `~/.shell/evolve-reviews/ghost-identity-handoff-20260713.md` (shell V2-H42 "identity constitution" needs ghost primitives). Agents keep whole personas as one undifferentiated pinned blob (~20 keys / ~3.6k tokens and growing, no mutation rules). Six asks, priority order:
+
+1. **Layer designation** — `layer:charter|personality|lore` (blessed tag or field) respected by retrieval, reflect, and render; one-time curation pass migrates existing identity-tagged keys.
+2. **Per-layer mutation policy enforced in the store**: charter writes require an explicit override flag and are immune to reflect/consolidate/dedupe; personality always versioned with version history + one-call revert (+ rate-limit metadata); lore unrestricted but budgeted.
+3. **Pinned-snapshot token budget with consolidate-on-overflow**: charter+personality always render; only lore competes; overflow consolidates (summary + contains edges — the shipped redesign machinery) instead of growing or dropping.
+4. **Stable per-layer render + hash** (API/CLI) so shell can diff L0 across generations (`identity_stability` eval dimension) and attribute prompt-fingerprint changes to a layer.
+5. **Promotion proposals from consolidation** — recurring lore patterns emit a PROPOSAL artifact shell can poll; never auto-promote to personality.
+6. **Identity key versions never GC'd/pruned** — version history is the rollback store.
+
+Constraints: LLM-free; validate against halumem/longmemeval/e2e + the in-repo battery; do not break `memory.SystemPrompt` frozen-per-generation snapshot contract; two separate agent DBs; keep deadline-aware rerank intact (quality canary until ~7/17). Definition-of-done in the handoff file (charter write w/o flag fails; zero automatic charter/personality mutations in reflect logs; budgeted render with expandable overflow summary; stable layer hashes; ≥1 real promotion proposal within a week).
+
+Note the design synergy: (3) is packing substitution applied to the pinned snapshot; (5) is the reflect/cluster machinery emitting artifacts; (2)/(6) extend the supersede/versioning model. Most primitives shipped this weekend — this workstream is largely composition + policy enforcement.
+
 ## Review-findings disposition (2026-07-14, owner-directed)
 - **#8 legacy digest class — DONE**: all remaining edge-less auto/exchange-summaries demoted to dormant (44 more on the primary store; class now fully archived). Verified: the collagen-thread query's summary wall replaced by the SR-collagen bulls-eye + live thread exchanges.
 - **#7 vector-path flooding — TUNING INSIGHT (measured)**: absolute cosine CANNOT separate filler from hits in this space — novel-topic filler 0.48–0.62, real topical hits 0.60–0.63 (overlap), real social hits 0.27–0.41 (BELOW filler). Any fixed threshold kills good answers before bad. The gate must be query-relative (distance from the query's own distribution) or hybrid (cosine AND term evidence). Build the embedded flooding eval scenario first, tune against it. Monitoring meanwhile.
