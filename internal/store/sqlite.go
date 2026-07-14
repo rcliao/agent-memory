@@ -55,7 +55,10 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	}
 
 	registerCJKSegmentUDF()
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)")
+	// busy_timeout: the daemon, CLI, and MCP server write the same DB —
+	// without a wait, a concurrent writer gets an instant SQLITE_BUSY
+	// (observed as "consolidate exchanges failed ... database is locked").
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
