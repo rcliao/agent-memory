@@ -84,6 +84,10 @@ type ContextMemory struct {
 	Content string  `json:"content"`
 	Score   float64 `json:"score"`
 	Excerpt bool    `json:"excerpt,omitempty"`
+	// SummaryOf lists the child keys this memory replaced during packing
+	// substitution (LCM compression under budget pressure). The caller can
+	// recover full detail via `ghost expand <key>` / ghost_expand.
+	SummaryOf []string `json:"summary_of,omitempty"`
 }
 
 // ContextResult is the assembled context response.
@@ -189,21 +193,33 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		accessTimes, _ = s.loadAccessTimes(ctx, ids)
 	}
 
-	// Direct-matched consolidation summaries are demoted: a contains-parent
-	// ("summary of 95 conversations") matches almost any query in fused
-	// retrieval (long digests hit FTS-OR terms and sit centroid-close in
-	// vector space) and was crowding real memories out of injection
-	// (measured on live personal queries: summaries at ranks 2-9). The
-	// LCM design intent is that summaries surface when their CHILDREN are
-	// relevant — that parent-boost path (edge expansion below) stays at
-	// full strength. Direct matches are scaled by GHOST_SUMMARY_DIRECT_WEIGHT
-	// (default 0.25; 1 disables the demotion).
-	summaryWeight := envFloatDefault("GHOST_SUMMARY_DIRECT_WEIGHT", 0.25)
-	var directParents map[string]bool
-	if summaryWeight < 1 {
+	// Liveness-scaled retrieval rights for direct-matched summaries: a
+	// contains-parent inherits searchability from its children's death.
+	// While children are alive the specific memories answer queries and
+	// the summary defers (weight → ~0); as children age into dormancy the
+	// summary becomes the epoch's surviving account and regains full
+	// strength (weight → 1). Replaces the earlier flat 0.25 demotion.
+	// GHOST_SUMMARY_DIRECT_WEIGHT, if set, overrides with a flat weight.
+	flatWeight := envFloatDefault("GHOST_SUMMARY_DIRECT_WEIGHT", -1)
+	var parentLiveness map[string]float64 // parentID → active-children fraction
+	{
 		asResults := make([]SearchResult, len(results))
 		copy(asResults, results)
-		directParents = s.containsParents(ctx, asResults)
+		parentLiveness = s.containsParentLiveness(ctx, asResults)
+	}
+	summaryWeightFor := func(id string) (float64, bool) {
+		activeFrac, isParent := parentLiveness[id]
+		if !isParent {
+			return 1, false
+		}
+		if flatWeight >= 0 {
+			return flatWeight, true
+		}
+		w := 1 - activeFrac
+		if w < 0.05 {
+			w = 0.05
+		}
+		return w, true
 	}
 
 	// scoreMap tracks scores by memory ID for edge boost merging
@@ -227,8 +243,8 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			sim = 0.15 + 0.55*overlap
 		}
 		score := computeContextScoreWithAccess(m, sim, now, p.Scope, accessTimes[m.ID])
-		if directParents[m.ID] {
-			score *= summaryWeight
+		if w, isParent := summaryWeightFor(m.ID); isParent {
+			score *= w
 		}
 		scoreMap[m.ID] = &contextCandidate{memory: m, score: score}
 	}
@@ -318,30 +334,25 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		candidates = mmrRerank(candidates, lambda)
 	}
 
-	// Build containment map before packing: for each candidate, find if it's
-	// a child of another candidate (via 'contains' edges). If a parent summary
-	// is in the candidate pool, its children should be suppressed.
-	suppressed := map[string]bool{}
-	{
-		candidateIDs := map[string]bool{}
-		for _, c := range candidates {
-			candidateIDs[c.memory.ID] = true
-		}
-		for _, c := range candidates {
-			children, err := s.getContainsChildren(ctx, c.memory.ID)
-			if err == nil && len(children) > 0 && len(children) <= parentBoostMaxChildren() {
-				// Mega-digests (fan-out beyond the cap) never suppress:
-				// letting a 95-conversation blob replace the specific
-				// memory that actually matched is how junk summaries
-				// hijacked injection on live personal queries.
-				for _, childID := range children {
-					if candidateIDs[childID] {
-						suppressed[childID] = true
-					}
-				}
-			}
-		}
+	// Packing substitution (LCM compression under pressure, the redesign's
+	// lossless move): when 3+ candidates share a contains-parent and the
+	// full candidate set overflows the budget, the parent substitutes for
+	// the group — one summary in context, children recoverable via
+	// `ghost expand` (SummaryOf carries the keys). Compression is
+	// proportional to pressure: with room, full detail is packed and the
+	// substitution never fires. GHOST_PACK_SUBSTITUTE=0 disables.
+	substituted := map[string][]string{} // parentID → child keys replaced
+	if os.Getenv("GHOST_PACK_SUBSTITUTE") != "0" && len(candidates) > 0 {
+		candidates = s.substituteParents(ctx, candidates, budget-usedTokens, substituted)
 	}
+
+	// Redesign note: unconditional parent→child suppression is gone.
+	// Children are first-class; a parent only replaces them via packing
+	// substitution above (budget pressure), and a direct-matched parent
+	// with living children is already liveness-demoted to ~0. Suppressing
+	// specifics in favor of their summary while there was room was how
+	// digests degraded injection quality (measured 2026-07-13).
+	suppressed := map[string]bool{}
 
 	// Greedy packing into remaining budget with contains-suppression.
 	// MaxMemoryTokens caps individual memories to prevent budget domination.
@@ -380,12 +391,13 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 
 		if usedTokens+memTokens <= budget {
 			result.Memories = append(result.Memories, ContextMemory{
-				NS:      c.memory.NS,
-				Key:     c.memory.Key,
-				Kind:    c.memory.Kind,
-				Content: content,
-				Score:   math.Round(c.score*100) / 100,
-				Excerpt: isExcerpt,
+				NS:        c.memory.NS,
+				Key:       c.memory.Key,
+				Kind:      c.memory.Kind,
+				Content:   content,
+				Score:     math.Round(c.score*100) / 100,
+				Excerpt:   isExcerpt,
+				SummaryOf: substituted[c.memory.ID],
 			})
 			usedTokens += memTokens
 		} else if remainingTokens := budget - usedTokens; remainingTokens >= 25 {
