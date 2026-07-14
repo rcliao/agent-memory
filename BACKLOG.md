@@ -151,6 +151,35 @@ parent running onboarding + freeform growth conversations against a live shell
 agent, judged on behavior (does Nova ACT like Nova at week 6?); reuses these
 same four assertions as the rubric. Shell-side, cost-gated like e2e_bench.
 
+## Write path — "the soul's ear" workstream (opened 2026-07-14, owner-directed)
+The nurture evals proved the write path is the narrowest gate: what capture
+misses never exists downstream. Eval-first plan, measurement SHIPPED:
+- **Capture-coverage corpus (in repo, TestEvalCaptureCoverage)**: measured
+  baseline **14/29 (48%)** — English 14/23 (~61%), **Chinese 0/6**: the
+  primary user's language never matches intent cues (all English word-boundary
+  regexes); CJK capture rides only on named entities. Chatter false-positive
+  guard = hard zero (EN+CJK). Floors lock in gains; gap flags flip as fixed.
+- **Next ship 1 — pattern widening**: CJK intent cues (比較喜歡/以後/不對/
+  過敏/決定/記得/不要再…) + English gaps (I'd rather / please always / going
+  forward / never share / that's not right / let's go with), each gated by the
+  corpus + zero chatter FPs.
+- **Next ship 2 — write-time triage (assimilate vs accommodate, LLM-free)**:
+  classify each incoming candidate against the live store into
+  REINFORCE (high distinctive-term/cosine overlap, same polarity → rehearsal
+  access + importance nudge on the EXISTING memory instead of a sibling —
+  makes repetition aggregate into spaced promotion by construction) /
+  CORRECT (subject overlap + negation/change-cue → supersede, new memory
+  inherits old standing) / REFINE (moderate overlap + new terms → version or
+  refines edge) / NEW / DISCARD. Signals all deterministic: IDF term overlap,
+  entity overlap, cosine when embedded, capture intent class, change-cue re.
+  Eval: triage-disposition corpus (pairs → expected disposition) + parenting
+  kit post-fix (sibling collapse; promotion via restatement without probe
+  tuning).
+- Later: shell tier-1 [remember:] side-channel (Candidate JSON via the
+  existing `ghost capture --json` commit path — media-note pattern
+  generalized); provenance/trust tags on write (MemGhost write-side defense);
+  correction-class durability (with supersede fallback).
+
 ## Retrieval-quality findings (2026-07-13/14 live-query reviews)
 - **Graded relevance + relevance gate SHIPPED (eval-first)**: the flat "any FTS match = 0.5 relevance" let recency float topically-empty filler over the floor. New: term-match-graded relevance (CJK-aware) + a gate that scales the composite down when relevance <0.45 — recency/importance are tie-breakers among relevant candidates, not substitutes. Proven by the new `flooding` eval slice: pre-fix FAIL (4 injected for a novel topic), post-fix 14/14. Side-win: freshness-update slice 0.14→**1.00** (fresh fact finally rank-0); personal meanMRR 0.790→**0.821**.
 - **NEXT EVAL CASE (defined by the live review, not yet modeled)**: vector-path flooding — live memories carry embeddings, and weak-but-real cosine (~0.3–0.45 semantic adjacency: meal memos vs a supplement question) bypasses the term-grading path. The FTS-only eval cannot see this; the embedded personal-eval variant (GHOST_PERSONAL_EMBED=1) needs a flooding scenario, then the gate curve gets tuned against it. This is the eval-catches-next-improvement loop working as designed.
