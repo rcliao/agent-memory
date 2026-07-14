@@ -22,6 +22,13 @@ repo's own measured findings. Statuses: `open | in-progress | done`.
 - **CJK FTS gap (real, measured)**: unicode61 tokenizes contiguous CJK runs as single tokens — 拖鞋 present in 7 chunks matches 0 in FTS (only punctuation-delimited terms like 鴻禧菇 index standalone, 185/197). Chinese recall currently rides the LIKE + vector channels; LIKE has no term scoring (created_at order only). **Next measured experiment: trigram-tokenized FTS** (index size + English-behavior tradeoffs need the full eval battery + latency bench).
 - Chat-scoped arm floods topic-divergent queries with the chat's dominant content class (meal memos); cross arm carries the topical answers. Structural improvement candidates: per-arm retrieval policy in shell, or topic-gate on the chat arm.
 
+## Review-findings disposition (2026-07-14, owner-directed)
+- **#8 legacy digest class — DONE**: all remaining edge-less auto/exchange-summaries demoted to dormant (44 more on the primary store; class now fully archived). Verified: the collagen-thread query's summary wall replaced by the SR-collagen bulls-eye + live thread exchanges.
+- **#7 vector-path flooding — TUNING INSIGHT (measured)**: absolute cosine CANNOT separate filler from hits in this space — novel-topic filler 0.48–0.62, real topical hits 0.60–0.63 (overlap), real social hits 0.27–0.41 (BELOW filler). Any fixed threshold kills good answers before bad. The gate must be query-relative (distance from the query's own distribution) or hybrid (cosine AND term evidence). Build the embedded flooding eval scenario first, tune against it. Monitoring meanwhile.
+- **#9 chat-arm query construction — shell design item**: send a distilled query (salient terms / current topic) for the chat-scoped fetch instead of the raw hedged message; owner flagged as interesting. Shell-side.
+- **#10 long-query dilution — design note**: weight query terms by distinctiveness (document-frequency over the namespace — rare terms like 膠原蛋白 dominate hedges like 不太確定). LLM-free, needs an eval case first.
+- **#11 recency contamination — RESOLVED**: the measured case (smart-home cluster on a coffee question) now injects zero contaminants under gate+rerank. Residual same-thread recency flavor is acceptable current-context behavior. Off the list.
+
 ## Summary-node redesign SHIPPED (2026-07-14)
 The four-rule redesign is live: (1) children are first-class — unconditional
 parent→child suppression removed; (2) **liveness-scaled retrieval rights** —
