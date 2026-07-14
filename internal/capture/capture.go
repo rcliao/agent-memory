@@ -53,6 +53,7 @@ const (
 	defaultMinSalience   = 0.35
 	defaultMaxCandidates = 12
 	minSegmentLen        = 20
+	minSegmentLenCJK     = 12
 	maxSegmentLen        = 400
 )
 
@@ -74,7 +75,14 @@ func Extract(text string, opts Options) []Candidate {
 
 	for _, seg := range segment(text, filter) {
 		trimmed := strings.TrimSpace(seg)
-		if len(trimmed) < minSegmentLen {
+		// CJK packs far more meaning per byte ("我們不喝酒" is a durable
+		// family fact in 15 bytes), so CJK-bearing segments get a lower
+		// floor; the cue/entity gate still drops short chatter.
+		floor := minSegmentLen
+		if containsCJKRune(trimmed) {
+			floor = minSegmentLenCJK
+		}
+		if len(trimmed) < floor {
 			continue
 		}
 		if len(trimmed) > maxSegmentLen {
@@ -228,4 +236,15 @@ func padScriptBoundaries(s string) string {
 		prev = r
 	}
 	return b.String()
+}
+
+// containsCJKRune reports whether the string carries any Han/kana rune.
+func containsCJKRune(s string) bool {
+	for _, r := range s {
+		if (r >= 0x4E00 && r <= 0x9FFF) || (r >= 0x3400 && r <= 0x4DBF) ||
+			(r >= 0x3040 && r <= 0x30FF) {
+			return true
+		}
+	}
+	return false
 }
