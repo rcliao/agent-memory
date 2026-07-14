@@ -90,6 +90,12 @@ var chatterCorpus = []string{
 	"好喔",
 	"哈哈真的假的",
 	"okay okay I'm heading out now, talk later!",
+	// Bridge-generated media placeholders are metadata, not user prose —
+	// found distilling live 2026-07-14 (sticker sets becoming "memories").
+	"(sticker) [emoji: 👀, set: Eeveelotions]",
+	"(sticker) [video sticker] [emoji: 😎, set: Capoo_Video2]",
+	"(photo)",
+	"(voice message) [duration: 12s]",
 }
 
 func TestEvalCaptureCoverage(t *testing.T) {
