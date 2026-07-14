@@ -98,6 +98,8 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		if existingKey != "" {
 			existing, err := s.Get(ctx, GetParams{NS: p.NS, Key: existingKey})
 			if err == nil && len(existing) > 0 {
+				// Triage: a duplicate statement is a rehearsal, not a no-op.
+				s.reinforce(ctx, existing[0].ID, importanceOrDefault(p.Importance))
 				return &existing[0], nil
 			}
 		}
@@ -109,11 +111,25 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		if err == nil && len(vec) > 0 {
 			similar := s.findSimilarForDedup(ctx, p.NS, vec, 0.82)
 			if similar != "" {
-				// Return the existing memory instead of creating a duplicate
+				// Triage REINFORCE: strengthen the existing memory instead of
+				// creating a sibling — being told twice is spaced rehearsal.
 				existing, err := s.Get(ctx, GetParams{NS: p.NS, Key: similar})
 				if err == nil && len(existing) > 0 {
+					s.reinforce(ctx, existing[0].ID, importanceOrDefault(p.Importance))
 					return &existing[0], nil
 				}
+			}
+		}
+	}
+
+	// LLM-free triage fallback: with no embedder, catch paraphrases of an
+	// existing live memory by strict bidirectional term overlap (write_triage.go).
+	if p.Dedup && s.embedder == nil {
+		if key := s.findParaphraseForDedup(ctx, p.NS, p.Content); key != "" {
+			existing, err := s.Get(ctx, GetParams{NS: p.NS, Key: key})
+			if err == nil && len(existing) > 0 {
+				s.reinforce(ctx, existing[0].ID, importanceOrDefault(p.Importance))
+				return &existing[0], nil
 			}
 		}
 	}
@@ -948,7 +964,7 @@ func (s *SQLiteStore) findSimilarForDedup(ctx context.Context, ns string, vec em
 		`SELECT m.key, c.embedding
 		 FROM memories m
 		 JOIN chunks c ON c.memory_id = m.id AND c.seq = 0
-		 WHERE m.ns = ? AND m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?)
+		 WHERE m.ns = ? AND m.deleted_at IS NULL AND m.tier != 'sensory' AND (m.expires_at IS NULL OR m.expires_at > ?)
 		   AND c.embedding IS NOT NULL
 		 ORDER BY m.created_at DESC
 		 LIMIT 50`, ns, now)

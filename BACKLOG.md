@@ -167,7 +167,15 @@ misses never exists downstream. Eval-first plan, measurement SHIPPED:
   pattern widened to multi-word subjects. Chatter FPs still zero (EN+CJK).
   Deployed to both daemons — mami's Chinese preferences/corrections/allergies
   now distill on every turn.
-- **Next ship 2 — write-time triage (assimilate vs accommodate, LLM-free)**:
+- **Triage v1 REINFORCE SHIPPED (2026-07-14)**: Dedup-enabled puts that
+  paraphrase a live memory (exact / cosine>=0.82 / strict bidirectional
+  distinctive-term overlap with stopword filtering in LLM-free mode) now
+  STRENGTHEN it — rehearsal access logged (spaced-promotion fuel) +
+  importance max-merge — instead of creating a sibling. Sensory tier
+  excluded as a target (nurture kits caught distillates being swallowed by
+  their own raw exchange — false-merge class fixed same hour). Parenting
+  kit: siblings collapse (live 14->12), promotion intact. Remaining triage
+  dispositions (CORRECT with standing inheritance, REFINE) still open:
   classify each incoming candidate against the live store into
   REINFORCE (high distinctive-term/cosine overlap, same polarity → rehearsal
   access + importance nudge on the EXISTING memory instead of a sibling —
