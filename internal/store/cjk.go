@@ -129,3 +129,89 @@ func registerCJKSegmentUDF() {
 		}
 	})
 }
+
+// gradedTermRelevance scores how much of the query's content vocabulary a
+// memory actually matches, in [0,1]. ASCII terms match on word equality or a
+// shared ≥4-char prefix (a cheap stand-in for stemming: bundle↔bundling);
+// CJK terms match by substring (the bigram index guarantees findability, this
+// grades strength). Stopwords are ignored. Replaces the flat "any FTS match
+// = 0.5 relevance" that let recency float topically-unmatched filler over
+// the score floor (measured live: a novel-topic query injected 12+ memos).
+func gradedTermRelevance(query, content string, stopwords map[string]bool) float64 {
+	contentLower := strings.ToLower(content)
+	contentWords := map[string]bool{}
+	for _, w := range strings.FieldsFunc(contentLower, func(r rune) bool {
+		return !('a' <= r && r <= 'z') && !('0' <= r && r <= '9')
+	}) {
+		if len(w) >= 2 {
+			contentWords[w] = true
+		}
+	}
+
+	total, matched := 0, 0
+	for _, term := range strings.Fields(strings.ToLower(query)) {
+		term = strings.Trim(term, "?.,!\"'()[]{}:;，。？！")
+		if term == "" || stopwords[term] {
+			continue
+		}
+		hasCJK := false
+		for _, r := range term {
+			if isCJK(r) {
+				hasCJK = true
+				break
+			}
+		}
+		total++
+		if hasCJK {
+			// CJK terms may glue onto particles ("oil對關節有用嗎") — grade
+			// by the longest CJK sub-run present in the content.
+			hit := false
+			runs := splitCJKRuns(term)
+			for _, run := range runs {
+				if len([]rune(run)) >= 2 && strings.Contains(contentLower, run) {
+					hit = true
+					break
+				}
+			}
+			if hit {
+				matched++
+			}
+			continue
+		}
+		if contentWords[term] {
+			matched++
+			continue
+		}
+		if len(term) >= 4 {
+			prefix := term[:4]
+			for w := range contentWords {
+				if strings.HasPrefix(w, prefix) {
+					matched++
+					break
+				}
+			}
+		}
+	}
+	if total == 0 {
+		return 0.5 // no content terms to grade — neutral
+	}
+	return float64(matched) / float64(total)
+}
+
+// splitCJKRuns extracts the contiguous CJK runs from a mixed term.
+func splitCJKRuns(term string) []string {
+	var runs []string
+	var cur []rune
+	for _, r := range term {
+		if isCJK(r) {
+			cur = append(cur, r)
+		} else if len(cur) > 0 {
+			runs = append(runs, string(cur))
+			cur = nil
+		}
+	}
+	if len(cur) > 0 {
+		runs = append(runs, string(cur))
+	}
+	return runs
+}

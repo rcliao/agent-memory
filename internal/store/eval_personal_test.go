@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -137,6 +138,20 @@ func runPersonalCases(t *testing.T, ctx context.Context, s *SQLiteStore) []Scena
 			sc.Metrics["surfaced"] = float64(len(keys))
 			if !sc.Pass {
 				sc.Errors = append(sc.Errors, "fabricated results for an absent-answer query")
+			}
+		case "flooding":
+			// Novel-topic flooding: a query grazing incidental template
+			// vocabulary must not inject the filler class. Control cases
+			// (Relevant set) gate on presence instead.
+			if c.MaxInjected > 0 {
+				sc.Pass = len(keys) <= c.MaxInjected
+				sc.Metrics["injected"] = float64(len(keys))
+				if !sc.Pass {
+					sc.Errors = append(sc.Errors,
+						fmt.Sprintf("flooding: %d injected for a novel topic (max %d)", len(keys), c.MaxInjected))
+				}
+			} else {
+				sc.Pass = present
 			}
 		case "multi-hop":
 			// Answer only reachable via edge expansion.
