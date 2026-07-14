@@ -129,6 +129,23 @@ emerge at production scale/noise; scale-up + noise-with-intent (fake
 preferences that capture distills, pressuring stm not just sensory) are the
 next knobs.
 
+**Parenting kit added (2026-07-14)** — the shaping loop, measured
+(TestEvalNurtureParenting, 7 weeks, 6 noise/day with every 3rd phrased so
+capture STORES it): (1) **behavior change** = repeated correction → the
+conduct rule is in context when the situation recurs (6/6 probes; the store's
+whole contribution to behavior — the model does the rest); (2) **personality
+development** = spaced encouragement earns ltm (promoted=6), one-offs don't;
+(3) **transience** = "just for today" instruction never becomes a trait (no
+late-context leak, never ltm); (4) **signal over noise** = stored noise: 0 in
+ltm, 0 probe contaminations, live noise below live signal. Findings: (a)
+capture's intent patterns are the write-path gate — phrasings outside them
+("My preference stays the same...") distill nothing; production corrections
+also arrive in many forms → capture pattern coverage is a measurable axis;
+(b) **restatement splits rehearsal**: the same rule in different words = N
+sibling memories, each with too little spaced access to promote alone —
+semantic aggregation (embedded dedup/clusters) is what should reunify them;
+the embedded kit variant will measure that.
+
 Phase 2 (queued): LLM-at-edge parent-agent harness — a real model plays the
 parent running onboarding + freeform growth conversations against a live shell
 agent, judged on behavior (does Nova ACT like Nova at week 6?); reuses these

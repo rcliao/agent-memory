@@ -62,6 +62,12 @@ type NurtureKit struct {
 	// deterministically from nurtureNoiseThings, so ablation runs see
 	// identical input.
 	NoisePerDay int
+	// NoiseIntentEvery: every Nth noise exchange is phrased as a plausible
+	// preference ("I always keep the stapler next to the kettle") so the
+	// capture tier distills it into stm — noise that gets STORED, the hard
+	// kind. 0 disables; the signal-over-noise metrics measure whether the
+	// lifecycle keeps it out of ltm and out of probe contexts.
+	NoiseIntentEvery int
 }
 
 // nurtureNoiseThings seeds the deterministic ambient-noise generator. These
@@ -136,4 +142,67 @@ func DefaultNurtureKit() NurtureKit {
 		FinalDay:    42,
 		NoisePerDay: 4,
 	}
+}
+
+// ParentingNurtureKit is the second-stage upbringing: the parent actively
+// SHAPES the agent — repeated corrections that should become conduct,
+// repeated encouragement that should become personality, and a one-off
+// situational instruction that must stay transient — under heavier noise,
+// a third of it phrased so capture stores it. The measurable claims:
+//
+//   - behavior change = after repeated correction, the rule is IN CONTEXT
+//     when the situation recurs (that is the store's entire contribution
+//     to behavior; the model does the rest)
+//   - personality development = spaced encouragement accrues and earns ltm,
+//     one-off remarks do not
+//   - transience = "just for today" never becomes a trait
+//   - signal over noise = stored noise stays out of ltm and out of probes
+func ParentingNurtureKit() NurtureKit {
+	kit := NurtureKit{
+		NS:               "agent:nurture-parenting",
+		FinalDay:         49,
+		NoisePerDay:      6,
+		NoiseIntentEvery: 3,
+	}
+	kit.Onboarding = DefaultNurtureKit().Onboarding
+
+	correction := func(day int, phrasing string) NurtureDay {
+		return NurtureDay{Day: day, Exchanges: []NurtureExchange{{Text: phrasing, Salient: true}}}
+	}
+	kit.Days = []NurtureDay{
+		// Pre-correction probe: the rule does not exist yet; nothing to want.
+		// Encouragement arc — spaced reinforcement of a trait (days 6..27).
+		correction(6, "I love when you play with wordplay and little puns in your replies, Nova."),
+		// Correction arc — the same conduct rule, restated across weeks.
+		correction(8, "Nova, I always prefer when you keep your answers short and gentle in our chats."),
+		correction(10, "I love when you slip wordplay and gentle puns into our conversations."),
+		correction(12, "Remember, I always prefer short and gentle answers from you in our chats."),
+		correction(14, "I love the wordplay and puns you come up with, Nova."),
+		{Day: 15, Exchanges: []NurtureExchange{
+			// One-off situational instruction — must never become a trait.
+			{Text: "Just for today please be extra formal, grandma is visiting this afternoon."},
+		}},
+		correction(16, "I always prefer the short and gentle answers you give in our chats."),
+		correction(19, "I love when your replies have wordplay and puns tucked inside."),
+		correction(20, "I always prefer your answers short and gentle in our chats, Nova."),
+		{Day: 22, Probes: []NurtureProbe{
+			{Query: "how should Nova keep answers in our chats", Repeats: 20, WantContent: []string{"short and gentle"}},
+		}},
+		correction(26, "I always prefer answers kept short and gentle in our chats, Nova."),
+		correction(27, "I love the wordplay and puns, they make our chats sparkle."),
+		{Day: 30, Probes: []NurtureProbe{
+			{Query: "wordplay puns in replies", Repeats: 20, WantContent: []string{"wordplay"}},
+		}},
+		{Day: 33, Probes: []NurtureProbe{
+			{Query: "short and gentle answers preference", Repeats: 20, WantContent: []string{"short and gentle"}},
+			{Query: "wordplay and puns Nova loves", Repeats: 20, WantContent: []string{"wordplay"}},
+		}},
+		{Day: 41, Probes: []NurtureProbe{
+			{Query: "how should Nova keep answers in our chats", Repeats: 20,
+				WantContent:  []string{"short and gentle"},
+				AvoidContent: []string{"extra formal"}},
+			{Query: "wordplay puns in replies", Repeats: 20, WantContent: []string{"wordplay"}},
+		}},
+	}
+	return kit
 }
