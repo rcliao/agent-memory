@@ -395,7 +395,11 @@ func (s *SQLiteStore) applyDedup(ctx context.Context, group []model.Memory) (int
 
 	archived := 0
 	for _, m := range group[1:] {
-		if lifecycleProtected(m) {
+		// Skip protected members, and members a prior cycle already archived —
+		// clusters persist across cycles, so without this the same dormant
+		// duplicates were re-archived every reflect (deduped=47/171 per cycle
+		// of pure churn in production).
+		if lifecycleProtected(m) || m.Tier == "dormant" {
 			continue
 		}
 		if m.AccessCount > maxAccess {
