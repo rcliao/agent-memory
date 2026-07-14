@@ -1,5 +1,40 @@
 # Ghost Backlog
 
+## PRIORITY QUEUE (owner-ranked 2026-07-14, by our real use cases)
+
+Use cases driving the ranking: (a) family agents carrying irreplaceable personas,
+(b) image-first daily-life conversations on the densest chat, (c) Chinese/CJK
+queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency.
+
+1. **Identity layers — safety subset** (asks 1, 2, 6: layer designation, per-layer
+   mutation policy in the store, never-GC guarantee). Only backlog item whose
+   failure mode is *permanent* loss (7/13 reflect demoted 2,675 memories; nothing
+   in the store guarantees consolidation can't rewrite a charter key). Eval-first:
+   charter-mutation eval must fail before the fix, pass after. Shell grades DoD.
+2. **Vision memory Phase 1** (shell-side, parallel track — no ghost-repo conflict):
+   ghost_put media-notes with FileRef + caption template. Biggest visible gap for
+   the heaviest user; near-zero cost since captions already exist at turn time.
+3. **#7 vector-path flooding**: embedded flooding eval scenario first, then the
+   query-relative/hybrid gate tuned against it. Confirmed on live traffic nightly;
+   damage bounded (extra injected filler), hence third not first.
+4. **Identity layers — feature half** (asks 3, 4, 5: pinned budget with
+   consolidate-on-overflow, per-layer render+hash, promotion proposals).
+5. **Shell consolidation contract**: digests born with `contains` edges (routes
+   shell consolidation through ghost consolidate); piggybacks on identity work.
+6. **#4 compaction_suggested threshold** — cheap fix, kills the ~183/day reflect
+   storm pressure.
+7. **#9/#10 query quality** (shell-side distilled chat-arm query; distinctiveness-
+   weighted terms) — eval case required before tuning.
+8. **Vision Phases 2–3** (SigLIP cross-modal, EXIF filters) — after identity; gated
+   on darwin/arm64 hugot ImageMode smoke test and whether Phase-1 captions prove
+   insufficient in agentic reviews.
+9. Ops hygiene when convenient: #5 namespace validation, #6 soft-delete purge.
+
+Passive: rerank quality canary runs until ~7/17 (recall_grounded before/after);
+ACT-R re-match once access logs mature; multi-hop research thread.
+
+---
+
 Ranked by user-facing impact. Sourced from the shell evolve-loop's production
 review of ghost (handoff 2026-07-13, `~/.shell/evolve-reviews/`) plus this
 repo's own measured findings. Statuses: `open | in-progress | done`.
