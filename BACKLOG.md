@@ -36,15 +36,28 @@ queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency
    retrievable through the full memory stack. Monitor via agentic review on
    photo turns; Phases 2–3 (SigLIP cross-modal, EXIF filters) stay queued below.
 3. **Lifecycle quality (owner-framed 2026-07-14): ghost's identity contribution
-   IS the pipeline.** Promotion/demotion/consolidation done carefully, behind
-   the now-safe pinned/locked floor: (a) promotion-signal quality — cluster
-   stability over time, not just size (TESSERA "repeated states": is the
-   pattern recurring across weeks?); (b) demotion care — decay respecting
-   proven utility (ease shipped; measure it on real access logs); (c) shell
-   consolidation contract — digests born with `contains` edges; (d) surface
-   these as consumable signals (clusters/edge-weights/candidates) for shell's
-   promotion judgment. Eval: lifecycle (FAMA) extensions + access-log ACT-R
-   re-match once logs mature.
+   IS the pipeline.** First monitoring round produced two measured diagnoses
+   and two shipped fixes:
+   - **Phantom churn FIXED**: no-op tier changes (already-dormant re-demoted
+     ~2.7k+1.9k/cycle across agents) no longer fire — live `demoted` dropped
+     2738→1. Remaining churn class: dedup re-archiving the same clusters
+     (deduped=47/171 every cycle) — same fix shape, queued.
+   - **Promotion starvation ROOT-CAUSED + FIXED (spaced access)**: access_count
+     counts every context injection (hot rows: 10k–83k accesses, utility ≤1),
+     so the low-utility prune (priority 90) executed every promotion candidate
+     before the promote rule (priority 50) saw it — promoted=0 in production,
+     ~2,497 of pika's 5,218 dormant = prune casualties incl. real behavioral
+     memories; explains umbreon's 96%-dormant/62-ltm degenerate shape. Fix:
+     lifecycle rules read the access LOG, not the counter — promote needs >=3
+     distinct access days (spaced rehearsal), prune spares spaced memories +
+     72h grace to earn spacing; no-log rows keep legacy behavior. Proven by
+     eval_lifecycle_spaced_test.go (red on main).
+   - Still open: (a) shell sends REAL utility feedback (grounded-recall
+     telemetry → utility-inc) — the proper signal; (b) selective restore of
+     prune casualties (shell data decision, SQL in handoff); (c) cluster
+     stability over time as the promotion-proposal signal (TESSERA); (d) shell
+     consolidation contract — digests born with `contains` edges; (e) dedup
+     churn skip; (f) ACT-R re-match on matured logs.
 4. **Store-integrity asks from shell wiring (2026-07-14)**: (a) **version
    handshake** — a stale ghost binary bypassed lock enforcement (library-level)
    against a newer-contract DB; store a contract version (user_version), old
