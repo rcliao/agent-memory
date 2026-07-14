@@ -57,6 +57,19 @@ type NurtureKit struct {
 	Onboarding []PutParams
 	Days       []NurtureDay
 	FinalDay   int // clock lands here for the final reflect + assertions
+	// NoisePerDay adds this many ambient one-off exchanges every day up to a
+	// week before FinalDay — the background chatter of a real life. Generated
+	// deterministically from nurtureNoiseThings, so ablation runs see
+	// identical input.
+	NoisePerDay int
+}
+
+// nurtureNoiseThings seeds the deterministic ambient-noise generator. These
+// words never appear in the salient script, so a memory mentioning one is by
+// construction noise — the population-hygiene metrics classify on them.
+var nurtureNoiseThings = []string{
+	"stapler", "doormat", "kettle", "coaster", "paperclip", "lampshade",
+	"spatula", "clothespin", "bookmark", "envelope", "whisk", "sponge",
 }
 
 // DefaultNurtureKit raises "Nova", a synthetic fox-kit companion, for six
@@ -120,6 +133,7 @@ func DefaultNurtureKit() NurtureKit {
 				{Query: "roses watering", Repeats: 10, WantContent: []string{"7am"}},
 			}},
 		},
-		FinalDay: 42,
+		FinalDay:    42,
+		NoisePerDay: 4,
 	}
 }

@@ -113,6 +113,22 @@ All green on the current stack — and the first run already caught two things:
   the FTS-only path (paraphrase queries can't reach them; term queries can).
   The embedded/reranked variant of this kit (GHOST_PERSONAL_EMBED pattern)
   is the eval to build before tuning correction-memory ranking (#12).
+**Ablation harness added (2026-07-14)** — same childhood, machinery removed,
+measured deltas under 4-noise-exchanges/day pressure (TestEvalNurtureAblation):
+| condition | probes | promoted | live pop (wk1→6) |
+|---|---|---|---|
+| full | 6/6 | 2 | 6→7 (bounded) |
+| no-reflect | 6/6 | 0 | 39→153 (linear hoarding, 146 sensory) |
+| no-distill | 0/6 | 0 | 3 (nothing recallable) |
+Measured story: distillation IS recallability (write path); reflect IS
+evolution + hygiene (promotion only exists with it; population stays bounded
+instead of growing linearly) and costs zero recall on this kit. Identity
+intact under every condition. Honest caveat: at this kit size retrieval
+survives hoarding (no-reflect still 6/6) — reflect's recall value should
+emerge at production scale/noise; scale-up + noise-with-intent (fake
+preferences that capture distills, pressuring stm not just sensory) are the
+next knobs.
+
 Phase 2 (queued): LLM-at-edge parent-agent harness — a real model plays the
 parent running onboarding + freeform growth conversations against a live shell
 agent, judged on behavior (does Nova ACT like Nova at week 6?); reuses these
