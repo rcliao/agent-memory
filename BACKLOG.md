@@ -6,21 +6,29 @@ Use cases driving the ranking: (a) family agents carrying irreplaceable personas
 (b) image-first daily-life conversations on the densest chat, (c) Chinese/CJK
 queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency.
 
-1. **Identity layers — safety subset** (asks 1, 2, 6). **SHIPPED 2026-07-14
-   (eval-first)**: `eval_identity_test.go` written first and red on all four
-   contracts (charter overwrite succeeded; reflect demoted a charter key to
-   dormant — the live risk in miniature; stale-GC deleted all three layers;
-   purge destroyed the personality rollback history), then green post-fix.
-   Implementation: `layer:charter|personality|lore` tags + `layers.go` helpers;
-   charter writes require `PutParams.LayerOverride` (CLI `--allow-charter`);
-   charter/personality skipped by reflect rules, merge/dedup (all four member
-   loops), stale-GC, low-utility prune, and supersede demotion; their
-   soft-deleted versions exempt from PurgeDeleted (history = rollback store);
-   lore exempt from DELETE-class ops/merge-absorb/stale-GC (consolidate, never
-   drop); TTL rejected on any layer memory. Full battery green. Remaining for
-   the feature half (#4 below): pinned budget, layer render+hash, promotion
-   proposals, MCP override wiring, one-time curation pass migrating live
-   identity keys, revert convenience + rate-limit metadata.
+1. **Identity foundation — REDESIGNED then shipped (PR #37, 2026-07-14).**
+   First cut implemented a `layer:charter|personality|lore` subsystem in the
+   store; owner challenged it ("good foundation, not new systems per use
+   case"), and a framework survey confirmed: identity taxonomies live in the
+   caller everywhere (character cards, ElizaOS, CLAUDE.md); the only
+   storage-layer guardrail anyone ships is Letta's per-block `read_only`.
+   Reworked to two GENERAL properties, no identity subsystem (`locked.go`):
+   (a) **pinned contract completed** — pinned was documented decay-exempt but
+   leaked: stale-GC, low-utility prune, supersede demotion, merge absorption,
+   and version purge could all touch pinned memories; all closed (these were
+   bugs, proven by the eval failing on main); (b) **blessed `locked` tag** =
+   read-only bit: overwriting a live locked memory requires `PutParams.Unlock`
+   (CLI `--unlock`), same lifecycle immunity as pinned even unpinned; TTL
+   rejected on both. Boundary rule: ghost = substrate (store/forget/reflect +
+   two safety bits enforced absolutely); shell = mind (layer taxonomy as its
+   own tags, pin/lock policy, budgets, render+hash, rate limits, promotion
+   judgment). Eval: `eval_identity_test.go` — persona-shaped fixture over the
+   general contract. Identity evolution preserved by design: deliberate
+   versioned writes only, never maintenance side effects (drift-literature
+   distinction: authorized trajectory vs compositional drift; MemGhost-class
+   attacks on always-loaded memory blocked by `locked`). Shell-side remaining:
+   tag its ~35 identity keys (pin+lock charter), grouping/render/hash,
+   lore-overflow via `ghost consolidate`.
 2. **Vision memory Phase 1** (shell-side, parallel track — no ghost-repo conflict):
    ghost_put media-notes with FileRef + caption template. Biggest visible gap for
    the heaviest user; near-zero cost since captions already exist at turn time.

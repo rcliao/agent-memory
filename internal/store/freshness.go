@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"regexp"
 
@@ -93,19 +92,15 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 		return
 	}
 
-	// Charter/personality identity memories are never demoted by automatic
-	// supersede detection — a change announcement in ordinary content must not
-	// erode the persona core's ranking.
-	var oldTagsJSON string
+	// Pinned/locked memories are never demoted by automatic supersede
+	// detection — a change announcement in ordinary content must not erode a
+	// protected memory's ranking.
+	var protected int
 	_ = s.db.QueryRowContext(ctx, `
-		SELECT COALESCE(tags,'') FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
-		ORDER BY version DESC LIMIT 1`, ns, bestKey).Scan(&oldTagsJSON)
-	if oldTagsJSON != "" {
-		var oldTags []string
-		_ = json.Unmarshal([]byte(oldTagsJSON), &oldTags)
-		if layerAutoProtected(memoryLayer(oldTags)) {
-			return
-		}
+		SELECT COUNT(*) FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
+		  AND NOT `+sqlNotProtected, ns, bestKey).Scan(&protected)
+	if protected > 0 {
+		return
 	}
 
 	// New contradicts old — force-include keeps the old fact visible, but the

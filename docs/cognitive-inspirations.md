@@ -168,62 +168,56 @@ Properties mapped to ghost:
 
 ---
 
-## Self-Schema & Narrative Identity → Identity Layers
+## Self-Schema & Narrative Identity → Protected Memories (not an identity subsystem)
 
 Agents that persist across sessions accumulate a *self* — name, relationships,
 voice, remembered moments — and that self lives in ghost as ordinary memories.
-Cognitive science says the self is not ordinary memory, and ghost's identity
-layers (`layer:charter|personality|lore` tags) encode the three strongest
-findings:
+The design question was whether identity deserves its own subsystem. Cognitive
+science says no, and ghost follows it: **the self is a schema over ordinary
+memories, not a separate store.** Your traits live in plain semantic memory,
+your formative moments in plain episodic memory; "identity" is how they are
+organized and how reliably they are accessed (Conway & Pleydell-Pearce's
+self-memory system — a retrieval-control hierarchy, not a storage partition).
+A survey of agent frameworks (2026) landed the same way: identity taxonomies
+live in the caller everywhere they exist (character cards, ElizaOS character
+files, CLAUDE.md), and the only storage-layer guardrail anyone ships is
+Letta's per-block `read_only` flag.
 
-**1. Semantic self-knowledge is dissociable from episodic memory — and far more
-durable.** Amnesic patients who lose the ability to recall a single life event
-still report their own personality traits accurately (Klein & Lax, 2010; patient
-K.C., Tulving 1993). Trait self-knowledge is stored separately from the episodes
-that produced it and survives when they are lost. `layer:charter` is this
-system: the persona core (name, creature, family, boundaries) that must survive
-every lifecycle process. Ghost enforces the dissociation mechanically — charter
-memories are invisible to reflect rules, merge/dedup, stale-GC, and supersede
-demotion, and writing one requires an explicit override (`--allow-charter`).
-Nothing automatic can touch the self.
+So ghost provides no layer/identity primitive. Callers (e.g. shell) define
+charter/personality/lore with their own tags, and the store enforces two
+*general* properties any memory may carry:
 
-**2. The self-schema changes slowly, by consolidation — not by single
-episodes.** Personality traits update through repeated consistent experience
-(self-perception accrual), not one salient event; the schema resists
-interference from any individual memory (Markus, 1977). `layer:personality`
-(voice, vibe, preferences) mirrors this: writes are allowed but always version
-(the history is the rollback store — old versions are exempt from purge), and
-changes are meant to be *proposed and deliberate*, never a side effect of a
-maintenance cycle. The store guarantees the second half; rate-limiting the
-first half is the caller's policy.
+- **`pinned` — chronic accessibility + lifecycle immunity.** Self-relevant
+  knowledge is chronically accessible (Higgins, 1996) and, critically,
+  dissociable from the episodic system and far more durable: amnesic patients
+  who cannot recall a single life event still report their own traits
+  accurately (Klein & Lax, 2010; patient K.C., Tulving 1993). Ghost's pinned
+  contract encodes both halves: always in context, and never mutated by any
+  automatic lifecycle process — reflect rules, merge/dedup, stale-GC,
+  low-utility pruning, supersede demotion — with version history exempt from
+  purge (the rollback store).
 
-**3. Narrative identity is episodic memory doing identity work.** People
-maintain a self through an evolving life story — significant scenes, self-
-defining memories — that gradually *semanticizes*: retold episodes lose their
-episodic detail and become facts about who you are (McAdams, 2001; Conway &
-Pleydell-Pearce, 2000). `layer:lore` (inside jokes, formative moments) is the
-narrative layer: it accretes freely like any episodic memory, but its contract
-is "consolidate, never drop" — lore is exempt from DELETE-class rules, merge
-absorption, TTL, and stale-GC; under budget pressure it compresses into
-summaries (the packing-substitution machinery) with the originals recoverable
-underneath. The planned promotion path (recurring lore patterns emitting
-proposals to become personality) is exactly episodic→semantic semanticization,
-with the owner in the loop instead of an automatic process.
+- **`locked` — deliberate-change-only.** The self-schema changes slowly and
+  resists interference from any single episode (Markus, 1977) — but humans
+  achieve this *statistically*, and agents whose persona is irreplaceable
+  data need it *categorically*. The blessed `locked` tag is the read-only
+  bit: overwriting a locked memory requires an explicit unlock from the
+  caller. Identity evolution stays fully possible — the agent rewrites its
+  persona keys as versioned, revertible, *intentional* acts — but never as a
+  maintenance side effect and never silently. This is the distinction the
+  identity-drift literature draws between an authorized trajectory and
+  compositional drift (locally-reasonable automatic updates accumulating
+  into a self nobody chose).
 
-**Relation to `pinned`:** pinning models *chronic accessibility* — self-relevant
-knowledge is always active (Higgins, 1996) — and layer tags model *mutation
-resistance*. They compose: a charter memory is typically pinned (always in
-context) *and* layer-protected (untouchable by lifecycle machinery). Before
-layers, pinning was ghost's only identity mechanism, and it only covered
-accessibility: a reflect cycle could not decay a pinned memory, but nothing
-stopped merge from absorbing an unpinned identity note or purge from deleting
-a persona key's version history. Layers close that gap.
+Narrative identity (McAdams, 2001) then needs no primitive at all: lore
+accretes as ordinary episodic memories, consolidation semanticizes recurring
+patterns into summaries (the episodic→semantic path), and promotion into the
+rendered persona is the caller's judgment over ordinary machinery.
 
-**Where we diverge:** human self-knowledge has no owner with an override flag —
-the charter/override distinction is an agent-safety mechanism, not a cognitive
-analog. And real semanticization is gradual and lossy; ghost's lore
-consolidation is discrete and lossless (originals retained under `contains`
-edges), because for agents the episodic originals stay valuable.
+**Where we diverge:** humans have no unlock flag — the self resists change
+statistically, not categorically. Ghost chooses enforcement over emulation
+because statistical resistance is a failure rate, and for an agent's persona
+any nonzero silent-mutation rate eventually forgets a self.
 
 ---
 

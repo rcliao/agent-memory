@@ -273,14 +273,9 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 		result.MemoriesEvaluated++
 		allMemories = append(allMemories, m)
 
-		// Pinned memories are exempt from all lifecycle rules
-		if m.Pinned {
-			continue
-		}
-		// Identity layers: charter/personality are never mutated by automatic
-		// cycles; lore is exempt from DELETE-class ops below (layers.go).
-		layer := memoryLayer(m.Tags)
-		if layerAutoProtected(layer) {
+		// Pinned and locked memories are exempt from all lifecycle rules
+		// (locked.go: change only ever by deliberate write, never maintenance)
+		if lifecycleProtected(m) {
 			continue
 		}
 
@@ -302,10 +297,6 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 				continue
 			}
 			if !ruleMatches(rule, m, ageHours, unaccessedHours, utilityRatio) {
-				continue
-			}
-			// Lore consolidates on overflow; it is never silently dropped.
-			if layer == LayerLore && (rule.Action.Op == "DELETE" || rule.Action.Op == "TTL_SET") {
 				continue
 			}
 			// D2 spaced-repetition: a proven-useful memory resists idle demotion.

@@ -20,17 +20,13 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		return nil, fmt.Errorf("invalid namespace: %w", err)
 	}
 
-	// Identity-layer mutation policy (see layers.go). Layer memories can never
-	// expire (TTL would let GC hard-delete a persona key), and charter writes —
-	// creating a charter key or overwriting one — need the explicit override.
-	newLayer := memoryLayer(p.Tags)
-	if newLayer != "" && p.TTL != "" {
-		return nil, fmt.Errorf("layer:%s memory cannot carry a ttl: identity-layer keys are never garbage-collected", newLayer)
+	// Protected-memory write policy (see locked.go). Pinned/locked memories
+	// can never expire (expired-GC hard-deletes, voiding their guarantees),
+	// and overwriting a live locked memory requires the explicit unlock.
+	if p.TTL != "" && (p.Pinned || p.Tier == "identity" || hasLockedTag(p.Tags)) {
+		return nil, fmt.Errorf("pinned or locked memory cannot carry a ttl: protected memories are never garbage-collected")
 	}
-	if !p.LayerOverride {
-		if newLayer == LayerCharter {
-			return nil, fmt.Errorf("layer:charter write requires an explicit override (--allow-charter): charter is the near-immutable persona core")
-		}
+	if !p.Unlock {
 		var prevTags sql.NullString
 		_ = s.db.QueryRowContext(ctx,
 			`SELECT tags FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
@@ -38,8 +34,8 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		if prevTags.Valid {
 			var prev []string
 			_ = json.Unmarshal([]byte(prevTags.String), &prev)
-			if memoryLayer(prev) == LayerCharter {
-				return nil, fmt.Errorf("key %q is layer:charter; overwrite requires an explicit override (--allow-charter)", p.Key)
+			if hasLockedTag(prev) {
+				return nil, fmt.Errorf("key %q is locked; overwrite requires an explicit unlock (--unlock)", p.Key)
 			}
 		}
 	}

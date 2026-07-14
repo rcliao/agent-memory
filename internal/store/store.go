@@ -24,10 +24,10 @@ type PutParams struct {
 	Files        []FileParam
 	Dedup        bool // if true, skip storing when a similar memory already exists (cosine > 0.82)
 	SkipAutoLink bool // if true, skip auto-linking edges after insert (useful for bulk ingestion/benchmarks)
-	// LayerOverride authorizes writing a layer:charter memory (identity-layer
-	// mutation policy). Charter is the near-immutable persona core: callers must
-	// pass this explicitly (CLI --allow-charter) for owner-initiated edits only.
-	LayerOverride bool
+	// Unlock authorizes overwriting a live memory carrying the blessed
+	// `locked` tag (the read-only bit — see locked.go). Callers pass it
+	// explicitly (CLI --unlock) for owner-initiated edits only.
+	Unlock bool
 }
 
 // FileParam specifies a file to link to a memory.
