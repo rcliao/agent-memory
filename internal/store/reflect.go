@@ -299,6 +299,19 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 			if !ruleMatches(rule, m, ageHours, unaccessedHours, utilityRatio) {
 				continue
 			}
+			// A tier change to the memory's current tier is a no-op: skip so
+			// the counters measure real transitions and the row stays
+			// eligible for later rules. (First lifecycle review found ~2.7k
+			// already-dormant rows re-"demoted" every cycle by the tier-less
+			// low-utility rule — thousands of wasted writes per reflect.)
+			if rule.Action.Op == "DEMOTE" || rule.Action.Op == "PROMOTE" {
+				if target, ok := rule.Action.Params["to_tier"].(string); ok && target == m.Tier {
+					continue
+				}
+			}
+			if rule.Action.Op == "ARCHIVE" && m.Tier == "archived" {
+				continue
+			}
 			// D2 spaced-repetition: a proven-useful memory resists idle demotion.
 			// The stale-ltm demote threshold scales with the memory's ease
 			// (derived from utility), so something used usefully N times survives
