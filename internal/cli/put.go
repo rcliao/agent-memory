@@ -30,6 +30,7 @@ func init() {
 	cmd.Flags().String("files", "", "Comma-separated file paths to link")
 	cmd.Flags().String("file-rel", "modified", "File relationship: modified, created, deleted, read")
 	cmd.Flags().Bool("dedup", false, "Skip storing if a semantically similar memory already exists (cosine > 0.92)")
+	cmd.Flags().Bool("unlock", false, "Authorize overwriting a memory tagged 'locked' (owner-initiated edits only)")
 
 	cmd.MarkFlagRequired("ns")
 	cmd.MarkFlagRequired("key")
@@ -115,6 +116,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	}
 
 	dedup, _ := cmd.Flags().GetBool("dedup")
+	unlock, _ := cmd.Flags().GetBool("unlock")
 
 	mem, err := st.Put(cmd.Context(), store.PutParams{
 		NS:       ns,
@@ -128,6 +130,8 @@ func runPut(cmd *cobra.Command, args []string) {
 		TTL:      ttl,
 		Files:    files,
 		Dedup:    dedup,
+
+		Unlock: unlock,
 	})
 	if err != nil {
 		exitErr("put", err)

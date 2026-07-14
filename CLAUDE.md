@@ -28,6 +28,7 @@ make install   # Install to $GOPATH/bin
 - Namespace = agent identity (`agent:pikamini`), tags = categorization (`identity`, `project:ghost`, `chat:123`)
 - Tier = lifecycle stage: sensory → stm → ltm → dormant (no more `identity` tier)
 - Pinned = chronic accessibility: always loaded in context, exempt from decay (replaces old `identity` tier)
+- Protected memories = two general safety bits, no identity subsystem (see `internal/store/locked.go`, docs/cognitive-inspirations.md): `pinned` is also lifecycle-immune (reflect/merge/dedup/stale-GC/supersede-demotion never touch it; its version history never purges); blessed `locked` tag = read-only bit (overwrite requires `PutParams.Unlock` / CLI `--unlock`, same lifecycle immunity); neither may carry a TTL. Identity taxonomies (charter/personality/lore) are caller-side tag conventions ghost does not interpret
 - Search: FTS5 ranked → LIKE fallback → vector embeddings, all support tag filtering
 - Context assembly: Phase 1 pinned, Phase 2 search, Phase 3 edge expansion (spreading activation)
 - Edges: weighted directed associations (`memory_edges` table) with auto-linking on put, co-retrieval strengthening, and decay in reflect

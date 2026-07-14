@@ -273,8 +273,9 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 		result.MemoriesEvaluated++
 		allMemories = append(allMemories, m)
 
-		// Pinned memories are exempt from all lifecycle rules
-		if m.Pinned {
+		// Pinned and locked memories are exempt from all lifecycle rules
+		// (locked.go: change only ever by deliberate write, never maintenance)
+		if lifecycleProtected(m) {
 			continue
 		}
 

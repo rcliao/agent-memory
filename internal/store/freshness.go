@@ -92,6 +92,17 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 		return
 	}
 
+	// Pinned/locked memories are never demoted by automatic supersede
+	// detection — a change announcement in ordinary content must not erode a
+	// protected memory's ranking.
+	var protected int
+	_ = s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
+		  AND NOT `+sqlNotProtected, ns, bestKey).Scan(&protected)
+	if protected > 0 {
+		return
+	}
+
 	// New contradicts old — force-include keeps the old fact visible, but the
 	// demotion below drops it beneath the current truth.
 	_, _ = s.CreateEdge(ctx, EdgeParams{

@@ -1,5 +1,58 @@
 # Ghost Backlog
 
+## PRIORITY QUEUE (owner-ranked 2026-07-14, by our real use cases)
+
+Use cases driving the ranking: (a) family agents carrying irreplaceable personas,
+(b) image-first daily-life conversations on the densest chat, (c) Chinese/CJK
+queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency.
+
+1. **Identity foundation — REDESIGNED then shipped (PR #37, 2026-07-14).**
+   First cut implemented a `layer:charter|personality|lore` subsystem in the
+   store; owner challenged it ("good foundation, not new systems per use
+   case"), and a framework survey confirmed: identity taxonomies live in the
+   caller everywhere (character cards, ElizaOS, CLAUDE.md); the only
+   storage-layer guardrail anyone ships is Letta's per-block `read_only`.
+   Reworked to two GENERAL properties, no identity subsystem (`locked.go`):
+   (a) **pinned contract completed** — pinned was documented decay-exempt but
+   leaked: stale-GC, low-utility prune, supersede demotion, merge absorption,
+   and version purge could all touch pinned memories; all closed (these were
+   bugs, proven by the eval failing on main); (b) **blessed `locked` tag** =
+   read-only bit: overwriting a live locked memory requires `PutParams.Unlock`
+   (CLI `--unlock`), same lifecycle immunity as pinned even unpinned; TTL
+   rejected on both. Boundary rule: ghost = substrate (store/forget/reflect +
+   two safety bits enforced absolutely); shell = mind (layer taxonomy as its
+   own tags, pin/lock policy, budgets, render+hash, rate limits, promotion
+   judgment). Eval: `eval_identity_test.go` — persona-shaped fixture over the
+   general contract. Identity evolution preserved by design: deliberate
+   versioned writes only, never maintenance side effects (drift-literature
+   distinction: authorized trajectory vs compositional drift; MemGhost-class
+   attacks on always-loaded memory blocked by `locked`). Shell-side remaining:
+   tag its ~35 identity keys (pin+lock charter), grouping/render/hash,
+   lore-overflow via `ghost consolidate`.
+2. **Vision memory Phase 1** (shell-side, parallel track — no ghost-repo conflict):
+   ghost_put media-notes with FileRef + caption template. Biggest visible gap for
+   the heaviest user; near-zero cost since captions already exist at turn time.
+3. **#7 vector-path flooding**: embedded flooding eval scenario first, then the
+   query-relative/hybrid gate tuned against it. Confirmed on live traffic nightly;
+   damage bounded (extra injected filler), hence third not first.
+4. **Identity layers — feature half** (asks 3, 4, 5: pinned budget with
+   consolidate-on-overflow, per-layer render+hash, promotion proposals).
+5. **Shell consolidation contract**: digests born with `contains` edges (routes
+   shell consolidation through ghost consolidate); piggybacks on identity work.
+6. **#4 compaction_suggested threshold** — cheap fix, kills the ~183/day reflect
+   storm pressure.
+7. **#9/#10 query quality** (shell-side distilled chat-arm query; distinctiveness-
+   weighted terms) — eval case required before tuning.
+8. **Vision Phases 2–3** (SigLIP cross-modal, EXIF filters) — after identity; gated
+   on darwin/arm64 hugot ImageMode smoke test and whether Phase-1 captions prove
+   insufficient in agentic reviews.
+9. Ops hygiene when convenient: #5 namespace validation, #6 soft-delete purge.
+
+Passive: rerank quality canary runs until ~7/17 (recall_grounded before/after);
+ACT-R re-match once access logs mature; multi-hop research thread.
+
+---
+
 Ranked by user-facing impact. Sourced from the shell evolve-loop's production
 review of ghost (handoff 2026-07-13, `~/.shell/evolve-reviews/`) plus this
 repo's own measured findings. Statuses: `open | in-progress | done`.

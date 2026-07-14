@@ -168,6 +168,59 @@ Properties mapped to ghost:
 
 ---
 
+## Self-Schema & Narrative Identity → Protected Memories (not an identity subsystem)
+
+Agents that persist across sessions accumulate a *self* — name, relationships,
+voice, remembered moments — and that self lives in ghost as ordinary memories.
+The design question was whether identity deserves its own subsystem. Cognitive
+science says no, and ghost follows it: **the self is a schema over ordinary
+memories, not a separate store.** Your traits live in plain semantic memory,
+your formative moments in plain episodic memory; "identity" is how they are
+organized and how reliably they are accessed (Conway & Pleydell-Pearce's
+self-memory system — a retrieval-control hierarchy, not a storage partition).
+A survey of agent frameworks (2026) landed the same way: identity taxonomies
+live in the caller everywhere they exist (character cards, ElizaOS character
+files, CLAUDE.md), and the only storage-layer guardrail anyone ships is
+Letta's per-block `read_only` flag.
+
+So ghost provides no layer/identity primitive. Callers (e.g. shell) define
+charter/personality/lore with their own tags, and the store enforces two
+*general* properties any memory may carry:
+
+- **`pinned` — chronic accessibility + lifecycle immunity.** Self-relevant
+  knowledge is chronically accessible (Higgins, 1996) and, critically,
+  dissociable from the episodic system and far more durable: amnesic patients
+  who cannot recall a single life event still report their own traits
+  accurately (Klein & Lax, 2010; patient K.C., Tulving 1993). Ghost's pinned
+  contract encodes both halves: always in context, and never mutated by any
+  automatic lifecycle process — reflect rules, merge/dedup, stale-GC,
+  low-utility pruning, supersede demotion — with version history exempt from
+  purge (the rollback store).
+
+- **`locked` — deliberate-change-only.** The self-schema changes slowly and
+  resists interference from any single episode (Markus, 1977) — but humans
+  achieve this *statistically*, and agents whose persona is irreplaceable
+  data need it *categorically*. The blessed `locked` tag is the read-only
+  bit: overwriting a locked memory requires an explicit unlock from the
+  caller. Identity evolution stays fully possible — the agent rewrites its
+  persona keys as versioned, revertible, *intentional* acts — but never as a
+  maintenance side effect and never silently. This is the distinction the
+  identity-drift literature draws between an authorized trajectory and
+  compositional drift (locally-reasonable automatic updates accumulating
+  into a self nobody chose).
+
+Narrative identity (McAdams, 2001) then needs no primitive at all: lore
+accretes as ordinary episodic memories, consolidation semanticizes recurring
+patterns into summaries (the episodic→semantic path), and promotion into the
+rendered persona is the caller's judgment over ordinary machinery.
+
+**Where we diverge:** humans have no unlock flag — the self resists change
+statistically, not categorically. Ghost chooses enforcement over emulation
+because statistical resistance is a failure rate, and for an agent's persona
+any nonzero silent-mutation rate eventually forgets a self.
+
+---
+
 ## Influences from Recent Agent Memory Research
 
 ### Park et al. — Generative Agents (2023)
@@ -204,6 +257,7 @@ ReMe's utility-based evaluation inspired ghost's `utility_count` / `access_count
 | Consolidation | Reflect links similar memories (non-destructive); `consolidate` creates hierarchical summaries | No automatic content transformation — summary text provided by caller (LCM-like lossless compaction) |
 | Levels of processing | Explicit importance at write time | Caller-declared, not encoding-depth-inferred |
 | Spreading activation | Edge expansion in Phase 3, Hebbian co-retrieval strengthening | Single-hop only, no persistent activation state |
+| Self-schema / narrative identity | 3 identity layers: charter (durable trait self-knowledge), personality (slow consolidation-driven change, versioned), lore (narrative episodes, consolidate-never-drop) | Owner override flag has no cognitive analog; lore semanticization is discrete and lossless, not gradual |
 | Park et al. | 4-factor retrieval scoring | Higher relevance weight, added access frequency |
 | MemGPT | Pinned tiers + search-based overflow | No self-editing — agent must explicitly store/update |
 | ReMe | Utility ratio for pruning | Explicit utility-inc, not automatically inferred |

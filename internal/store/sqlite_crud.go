@@ -20,6 +20,26 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		return nil, fmt.Errorf("invalid namespace: %w", err)
 	}
 
+	// Protected-memory write policy (see locked.go). Pinned/locked memories
+	// can never expire (expired-GC hard-deletes, voiding their guarantees),
+	// and overwriting a live locked memory requires the explicit unlock.
+	if p.TTL != "" && (p.Pinned || p.Tier == "identity" || hasLockedTag(p.Tags)) {
+		return nil, fmt.Errorf("pinned or locked memory cannot carry a ttl: protected memories are never garbage-collected")
+	}
+	if !p.Unlock {
+		var prevTags sql.NullString
+		_ = s.db.QueryRowContext(ctx,
+			`SELECT tags FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
+			 ORDER BY version DESC LIMIT 1`, p.NS, p.Key).Scan(&prevTags)
+		if prevTags.Valid {
+			var prev []string
+			_ = json.Unmarshal([]byte(prevTags.String), &prev)
+			if hasLockedTag(prev) {
+				return nil, fmt.Errorf("key %q is locked; overwrite requires an explicit unlock (--unlock)", p.Key)
+			}
+		}
+	}
+
 	now := s.now().UTC()
 	id := s.newID()
 
