@@ -28,7 +28,7 @@ func (s *SQLiteStore) applySimilarityMerge(ctx context.Context, rule ReflectRule
 	// 1. Filter candidates by non-similarity conditions
 	var candidates []model.Memory
 	for _, m := range allMemories {
-		if deletedIDs[m.ID] {
+		if deletedIDs[m.ID] || memoryAutoProtected(m) {
 			continue
 		}
 		ageHours := now.Sub(m.CreatedAt).Hours()
@@ -326,8 +326,9 @@ func (s *SQLiteStore) applyMerge(ctx context.Context, group []model.Memory) (int
 	// Soft-delete absorbed memories and create merged_into links
 	absorbed := 0
 	for _, m := range group[1:] {
-		// Pinned memories must never be absorbed
-		if m.Pinned {
+		// Pinned and identity-layer memories must never be absorbed — merge
+		// soft-deletes, and lore's contract is "consolidate, never drop".
+		if m.Pinned || memoryLayer(m.Tags) != "" {
 			continue
 		}
 		_, err = tx.ExecContext(ctx,
@@ -395,7 +396,9 @@ func (s *SQLiteStore) applyDedup(ctx context.Context, group []model.Memory) (int
 
 	archived := 0
 	for _, m := range group[1:] {
-		if m.Pinned {
+		// Pinned and charter/personality are never archived by dedup; lore may
+		// be (dormant + contains edge keeps it recoverable via expand).
+		if m.Pinned || memoryAutoProtected(m) {
 			continue
 		}
 		if m.AccessCount > maxAccess {
@@ -476,7 +479,7 @@ func (s *SQLiteStore) dedupLinkedClusters(ctx context.Context, clusters []Memory
 		}
 		for _, key := range cluster.Keys {
 			m, ok := keyToMem[key]
-			if !ok || deletedIDs[m.ID] || m.Pinned {
+			if !ok || deletedIDs[m.ID] || m.Pinned || memoryAutoProtected(m) {
 				continue
 			}
 			candidateIDs = append(candidateIDs, m.ID)
@@ -500,7 +503,7 @@ func (s *SQLiteStore) dedupLinkedClusters(ctx context.Context, clusters []Memory
 		var members []model.Memory
 		for _, key := range cluster.Keys {
 			m, ok := keyToMem[key]
-			if !ok || deletedIDs[m.ID] || m.Pinned {
+			if !ok || deletedIDs[m.ID] || m.Pinned || memoryAutoProtected(m) {
 				continue
 			}
 			if _, hasEmb := embMap[m.ID]; !hasEmb {

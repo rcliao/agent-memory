@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"regexp"
 
@@ -90,6 +91,21 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 	}
 	if bestOverlap == 0 || bestKey == "" {
 		return
+	}
+
+	// Charter/personality identity memories are never demoted by automatic
+	// supersede detection — a change announcement in ordinary content must not
+	// erode the persona core's ranking.
+	var oldTagsJSON string
+	_ = s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(tags,'') FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
+		ORDER BY version DESC LIMIT 1`, ns, bestKey).Scan(&oldTagsJSON)
+	if oldTagsJSON != "" {
+		var oldTags []string
+		_ = json.Unmarshal([]byte(oldTagsJSON), &oldTags)
+		if layerAutoProtected(memoryLayer(oldTags)) {
+			return
+		}
 	}
 
 	// New contradicts old — force-include keeps the old fact visible, but the

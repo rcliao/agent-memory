@@ -24,8 +24,9 @@ type PurgeResult struct {
 	ChunksFreed    int64
 }
 
-// purgeSelector matches soft-deleted memories older than the cutoff.
-const purgeSelector = `SELECT id FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ?`
+// purgeSelector matches soft-deleted memories older than the cutoff. Soft-deleted
+// versions of charter/personality keys are the rollback store and never purge.
+const purgeSelector = `SELECT id FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ? AND ` + sqlNotLayerProtected
 
 // PurgeDeletedDryRun counts soft-deleted memories (and their chunks) older than
 // olderThan without deleting anything. olderThan == 0 counts all soft-deleted.
@@ -33,7 +34,7 @@ func (s *SQLiteStore) PurgeDeletedDryRun(ctx context.Context, olderThan time.Dur
 	cutoff := time.Now().UTC().Add(-olderThan).Format(time.RFC3339)
 	var r PurgeResult
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ?`, cutoff).Scan(&r.MemoriesPurged); err != nil {
+		`SELECT COUNT(*) FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ? AND `+sqlNotLayerProtected, cutoff).Scan(&r.MemoriesPurged); err != nil {
 		return r, err
 	}
 	if err := s.db.QueryRowContext(ctx,
@@ -80,7 +81,7 @@ func (s *SQLiteStore) PurgeDeleted(ctx context.Context, olderThan time.Duration)
 		return r, fmt.Errorf("purge chunks: %w", err)
 	}
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ?`, cutoff)
+		`DELETE FROM memories WHERE deleted_at IS NOT NULL AND deleted_at <= ? AND `+sqlNotLayerProtected, cutoff)
 	if err != nil {
 		return r, fmt.Errorf("purge memories: %w", err)
 	}
@@ -109,6 +110,7 @@ func (s *SQLiteStore) GCStaleDryRun(ctx context.Context, staleThreshold time.Dur
 		`SELECT COUNT(*) FROM memories
 		 WHERE deleted_at IS NULL
 		   AND priority NOT IN ('high', 'critical')
+		   AND `+sqlNotLayerTagged+`
 		   AND COALESCE(last_accessed_at, created_at) < ?`, cutoff).Scan(&result.MemoriesDeleted)
 	if err != nil {
 		return result, err
@@ -148,6 +150,7 @@ func (s *SQLiteStore) GCStale(ctx context.Context, staleThreshold time.Duration)
 		`UPDATE memories SET deleted_at = ?
 		 WHERE deleted_at IS NULL
 		   AND priority NOT IN ('high', 'critical')
+		   AND `+sqlNotLayerTagged+`
 		   AND COALESCE(last_accessed_at, created_at) < ?`, nowStr, cutoff)
 	if err != nil {
 		return result, fmt.Errorf("soft-delete stale memories: %w", err)
@@ -162,6 +165,7 @@ func (s *SQLiteStore) GCStale(ctx context.Context, staleThreshold time.Duration)
 	utilRes, err := s.db.ExecContext(ctx,
 		`UPDATE memories SET deleted_at = ?
 		 WHERE deleted_at IS NULL
+		   AND `+sqlNotLayerTagged+`
 		   AND access_count >= 5
 		   AND utility_count > 0
 		   AND CAST(utility_count AS REAL) / CAST(access_count AS REAL) < 0.2`, nowStr)

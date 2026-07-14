@@ -6,11 +6,21 @@ Use cases driving the ranking: (a) family agents carrying irreplaceable personas
 (b) image-first daily-life conversations on the densest chat, (c) Chinese/CJK
 queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency.
 
-1. **Identity layers — safety subset** (asks 1, 2, 6: layer designation, per-layer
-   mutation policy in the store, never-GC guarantee). Only backlog item whose
-   failure mode is *permanent* loss (7/13 reflect demoted 2,675 memories; nothing
-   in the store guarantees consolidation can't rewrite a charter key). Eval-first:
-   charter-mutation eval must fail before the fix, pass after. Shell grades DoD.
+1. **Identity layers — safety subset** (asks 1, 2, 6). **SHIPPED 2026-07-14
+   (eval-first)**: `eval_identity_test.go` written first and red on all four
+   contracts (charter overwrite succeeded; reflect demoted a charter key to
+   dormant — the live risk in miniature; stale-GC deleted all three layers;
+   purge destroyed the personality rollback history), then green post-fix.
+   Implementation: `layer:charter|personality|lore` tags + `layers.go` helpers;
+   charter writes require `PutParams.LayerOverride` (CLI `--allow-charter`);
+   charter/personality skipped by reflect rules, merge/dedup (all four member
+   loops), stale-GC, low-utility prune, and supersede demotion; their
+   soft-deleted versions exempt from PurgeDeleted (history = rollback store);
+   lore exempt from DELETE-class ops/merge-absorb/stale-GC (consolidate, never
+   drop); TTL rejected on any layer memory. Full battery green. Remaining for
+   the feature half (#4 below): pinned budget, layer render+hash, promotion
+   proposals, MCP override wiring, one-time curation pass migrating live
+   identity keys, revert convenience + rate-limit metadata.
 2. **Vision memory Phase 1** (shell-side, parallel track — no ghost-repo conflict):
    ghost_put media-notes with FileRef + caption template. Biggest visible gap for
    the heaviest user; near-zero cost since captions already exist at turn time.

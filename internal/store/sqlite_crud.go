@@ -20,6 +20,30 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		return nil, fmt.Errorf("invalid namespace: %w", err)
 	}
 
+	// Identity-layer mutation policy (see layers.go). Layer memories can never
+	// expire (TTL would let GC hard-delete a persona key), and charter writes —
+	// creating a charter key or overwriting one — need the explicit override.
+	newLayer := memoryLayer(p.Tags)
+	if newLayer != "" && p.TTL != "" {
+		return nil, fmt.Errorf("layer:%s memory cannot carry a ttl: identity-layer keys are never garbage-collected", newLayer)
+	}
+	if !p.LayerOverride {
+		if newLayer == LayerCharter {
+			return nil, fmt.Errorf("layer:charter write requires an explicit override (--allow-charter): charter is the near-immutable persona core")
+		}
+		var prevTags sql.NullString
+		_ = s.db.QueryRowContext(ctx,
+			`SELECT tags FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
+			 ORDER BY version DESC LIMIT 1`, p.NS, p.Key).Scan(&prevTags)
+		if prevTags.Valid {
+			var prev []string
+			_ = json.Unmarshal([]byte(prevTags.String), &prev)
+			if memoryLayer(prev) == LayerCharter {
+				return nil, fmt.Errorf("key %q is layer:charter; overwrite requires an explicit override (--allow-charter)", p.Key)
+			}
+		}
+	}
+
 	now := s.now().UTC()
 	id := s.newID()
 

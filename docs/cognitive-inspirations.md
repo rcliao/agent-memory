@@ -168,6 +168,65 @@ Properties mapped to ghost:
 
 ---
 
+## Self-Schema & Narrative Identity → Identity Layers
+
+Agents that persist across sessions accumulate a *self* — name, relationships,
+voice, remembered moments — and that self lives in ghost as ordinary memories.
+Cognitive science says the self is not ordinary memory, and ghost's identity
+layers (`layer:charter|personality|lore` tags) encode the three strongest
+findings:
+
+**1. Semantic self-knowledge is dissociable from episodic memory — and far more
+durable.** Amnesic patients who lose the ability to recall a single life event
+still report their own personality traits accurately (Klein & Lax, 2010; patient
+K.C., Tulving 1993). Trait self-knowledge is stored separately from the episodes
+that produced it and survives when they are lost. `layer:charter` is this
+system: the persona core (name, creature, family, boundaries) that must survive
+every lifecycle process. Ghost enforces the dissociation mechanically — charter
+memories are invisible to reflect rules, merge/dedup, stale-GC, and supersede
+demotion, and writing one requires an explicit override (`--allow-charter`).
+Nothing automatic can touch the self.
+
+**2. The self-schema changes slowly, by consolidation — not by single
+episodes.** Personality traits update through repeated consistent experience
+(self-perception accrual), not one salient event; the schema resists
+interference from any individual memory (Markus, 1977). `layer:personality`
+(voice, vibe, preferences) mirrors this: writes are allowed but always version
+(the history is the rollback store — old versions are exempt from purge), and
+changes are meant to be *proposed and deliberate*, never a side effect of a
+maintenance cycle. The store guarantees the second half; rate-limiting the
+first half is the caller's policy.
+
+**3. Narrative identity is episodic memory doing identity work.** People
+maintain a self through an evolving life story — significant scenes, self-
+defining memories — that gradually *semanticizes*: retold episodes lose their
+episodic detail and become facts about who you are (McAdams, 2001; Conway &
+Pleydell-Pearce, 2000). `layer:lore` (inside jokes, formative moments) is the
+narrative layer: it accretes freely like any episodic memory, but its contract
+is "consolidate, never drop" — lore is exempt from DELETE-class rules, merge
+absorption, TTL, and stale-GC; under budget pressure it compresses into
+summaries (the packing-substitution machinery) with the originals recoverable
+underneath. The planned promotion path (recurring lore patterns emitting
+proposals to become personality) is exactly episodic→semantic semanticization,
+with the owner in the loop instead of an automatic process.
+
+**Relation to `pinned`:** pinning models *chronic accessibility* — self-relevant
+knowledge is always active (Higgins, 1996) — and layer tags model *mutation
+resistance*. They compose: a charter memory is typically pinned (always in
+context) *and* layer-protected (untouchable by lifecycle machinery). Before
+layers, pinning was ghost's only identity mechanism, and it only covered
+accessibility: a reflect cycle could not decay a pinned memory, but nothing
+stopped merge from absorbing an unpinned identity note or purge from deleting
+a persona key's version history. Layers close that gap.
+
+**Where we diverge:** human self-knowledge has no owner with an override flag —
+the charter/override distinction is an agent-safety mechanism, not a cognitive
+analog. And real semanticization is gradual and lossy; ghost's lore
+consolidation is discrete and lossless (originals retained under `contains`
+edges), because for agents the episodic originals stay valuable.
+
+---
+
 ## Influences from Recent Agent Memory Research
 
 ### Park et al. — Generative Agents (2023)
@@ -204,6 +263,7 @@ ReMe's utility-based evaluation inspired ghost's `utility_count` / `access_count
 | Consolidation | Reflect links similar memories (non-destructive); `consolidate` creates hierarchical summaries | No automatic content transformation — summary text provided by caller (LCM-like lossless compaction) |
 | Levels of processing | Explicit importance at write time | Caller-declared, not encoding-depth-inferred |
 | Spreading activation | Edge expansion in Phase 3, Hebbian co-retrieval strengthening | Single-hop only, no persistent activation state |
+| Self-schema / narrative identity | 3 identity layers: charter (durable trait self-knowledge), personality (slow consolidation-driven change, versioned), lore (narrative episodes, consolidate-never-drop) | Owner override flag has no cognitive analog; lore semanticization is discrete and lossless, not gradual |
 | Park et al. | 4-factor retrieval scoring | Higher relevance weight, added access frequency |
 | MemGPT | Pinned tiers + search-based overflow | No self-editing — agent must explicitly store/update |
 | ReMe | Utility ratio for pruning | Explicit utility-inc, not automatically inferred |

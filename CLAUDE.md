@@ -28,6 +28,7 @@ make install   # Install to $GOPATH/bin
 - Namespace = agent identity (`agent:pikamini`), tags = categorization (`identity`, `project:ghost`, `chat:123`)
 - Tier = lifecycle stage: sensory → stm → ltm → dormant (no more `identity` tier)
 - Pinned = chronic accessibility: always loaded in context, exempt from decay (replaces old `identity` tier)
+- Identity layers = mutation resistance (`layer:charter|personality|lore` tags): charter writes require `PutParams.LayerOverride` (CLI `--allow-charter`); charter/personality are exempt from reflect/merge/dedup/stale-GC/supersede-demotion and their version history never purges; lore is never deleted, only consolidated; no layer memory may carry a TTL (see `internal/store/layers.go`, docs/cognitive-inspirations.md)
 - Search: FTS5 ranked → LIKE fallback → vector embeddings, all support tag filtering
 - Context assembly: Phase 1 pinned, Phase 2 search, Phase 3 edge expansion (spreading activation)
 - Edges: weighted directed associations (`memory_edges` table) with auto-linking on put, co-retrieval strengthening, and decay in reflect
