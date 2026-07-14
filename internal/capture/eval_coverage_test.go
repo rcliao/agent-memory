@@ -60,6 +60,16 @@ var coverageCorpus = []coverageCase{
 	{text: "我對香茅過敏，煮菜的時候不要放。", class: "zh-fact"},
 	{text: "我們決定八月三號去西雅圖玩。", class: "zh-decision"},
 	{text: "記得以後早上七點提醒我幫玫瑰澆水。", class: "zh-boundary"},
+	// Entity embedded in a CJK run (no spaces) — found live 2026-07-14: the
+	// Koda troubleshooting turn distilled nothing because "Koda" inside
+	// 看了Koda的燈 never became a token.
+	{text: "剛剛看了Koda的燈又在閃爍，看起來像是感應器的問題。", class: "zh-entity"},
+	// Multi-sentence CJK: 。-separated sentences must be split so each is
+	// classified on its own (unsplit blobs truncate at 400 bytes).
+	{text: "我們決定八月三號出發。我比較喜歡早上的班機。", class: "zh-multisent"},
+	// Sentence-initial English entity is discounted by the NER heuristic —
+	// documented gap (entity package change, not capture).
+	{text: "Koda's light flickered again around six this evening.", class: "en-entity", gap: true},
 }
 
 // chatterCorpus must produce ZERO candidates — the false-positive guard.
@@ -101,7 +111,8 @@ func TestEvalCaptureCoverage(t *testing.T) {
 	}
 
 	classes := []string{"preference", "correction", "decision", "boundary", "fact", "procedural",
-		"zh-preference", "zh-correction", "zh-decision", "zh-boundary", "zh-fact"}
+		"zh-preference", "zh-correction", "zh-decision", "zh-boundary", "zh-fact",
+		"zh-entity", "zh-multisent", "en-entity"}
 	t.Log("class          coverage  knownGaps")
 	totalHit, totalAll := 0, 0
 	for _, cl := range classes {

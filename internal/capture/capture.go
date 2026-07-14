@@ -82,7 +82,10 @@ func Extract(text string, opts Options) []Candidate {
 		}
 
 		cues := classify(trimmed)
-		ents := entity.Extract(trimmed)
+		// Entity extraction tokenizes on spaces, so Latin names embedded in a
+		// CJK run ("看了Koda的燈") are invisible without padding the script
+		// boundaries first. Stored content stays original.
+		ents := entity.Extract(padScriptBoundaries(trimmed))
 
 		// A segment is worth remembering only if it carries an intent cue or a
 		// named entity. Pure chatter ("haha ok thanks") has neither and is dropped.
@@ -188,7 +191,7 @@ func splitSentences(s string) []string {
 	var b strings.Builder
 	for _, r := range s {
 		b.WriteRune(r)
-		if r == '.' || r == '!' || r == '?' || r == '\n' {
+		if r == '.' || r == '!' || r == '?' || r == '\n' || r == '。' || r == '！' || r == '？' {
 			out = append(out, b.String())
 			b.Reset()
 		}
@@ -201,4 +204,28 @@ func splitSentences(s string) []string {
 
 func normalizeContent(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
+}
+
+// padScriptBoundaries inserts spaces where Latin/digit runs abut CJK runs so
+// space-tokenized consumers (entity extraction) see embedded names like
+// "Koda" in 看了Koda的燈 as their own tokens.
+func padScriptBoundaries(s string) string {
+	isCJK := func(r rune) bool {
+		return (r >= 0x4E00 && r <= 0x9FFF) || (r >= 0x3400 && r <= 0x4DBF) ||
+			(r >= 0x3040 && r <= 0x30FF) || (r >= 0xF900 && r <= 0xFAFF)
+	}
+	isLatin := func(r rune) bool {
+		return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	var prev rune
+	for i, r := range s {
+		if i > 0 && ((isCJK(prev) && isLatin(r)) || (isLatin(prev) && isCJK(r))) {
+			b.WriteRune(' ')
+		}
+		b.WriteRune(r)
+		prev = r
+	}
+	return b.String()
 }
