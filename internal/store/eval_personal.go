@@ -48,6 +48,20 @@ func PersonalSeedCorpus() []SeedMemory {
 		{NS: PersonalNS, Key: "today-errand", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.4,
 			BackdateHours: 3, Content: "I need to pick up the dry cleaning after 5pm today."},
 
+		// ── Dense filler class for the flooding eval: recent daily-log
+		//    template memories sharing vocabulary with each other. A novel-
+		//    topic query that grazes one incidental term must NOT inject
+		//    this wall (live failure: "Castor oil對關節有用嗎" injected 12+
+		//    meal memos — recency + flat 0.5 FTS relevance beat the floor).
+		{NS: PersonalNS, Key: "daily-log-1", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.5,
+			BackdateHours: 24, Content: "Daily log Tuesday: morning oatmeal with berries, afternoon walk, evening reading session."},
+		{NS: PersonalNS, Key: "daily-log-2", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.5,
+			BackdateHours: 48, Content: "Daily log Monday: morning toast with avocado, afternoon errands, evening movie session."},
+		{NS: PersonalNS, Key: "daily-log-3", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.5,
+			BackdateHours: 72, Content: "Daily log Sunday: morning pancakes with syrup, afternoon gardening, evening board games session."},
+		{NS: PersonalNS, Key: "daily-log-4", Kind: "episodic", Tier: "stm", Priority: "normal", Importance: 0.5,
+			BackdateHours: 96, Content: "Daily log Saturday: morning eggs with spinach, afternoon groceries, evening baking session."},
+
 		// ── Stale distractor sharing terms with a same-day fact ───────────
 		{NS: PersonalNS, Key: "parking-usual", Kind: "semantic", Tier: "ltm", Priority: "normal", Importance: 0.6,
 			BackdateHours: 1440, Content: "I usually keep the car in the office garage on lot A."},
@@ -117,6 +131,9 @@ type PersonalCase struct {
 	// ExpectAbstain marks a query with no true answer: the system should NOT
 	// fabricate one. Pass = no memory surfaces above MinScore.
 	ExpectAbstain bool
+	// MaxInjected caps how many memories the scenario may inject (0 = no
+	// cap). Used by flooding cases: exceeding it is the failure.
+	MaxInjected int
 	// MinScore is passed to Context (0 = no floor). Used by abstention cases.
 	MinScore float64
 }
@@ -156,5 +173,21 @@ func PersonalCases() []PersonalCase {
 		// fairly measure; it needs the embedded variant.)
 		{Name: "absent-topic", Category: "abstention", Query: "photosynthesis chlorophyll thylakoid membrane", UseContext: true,
 			ExpectAbstain: true},
+
+		// Novel-topic flooding: the query's topic does not exist in the store
+		// but grazes incidental template vocabulary ("morning", "session")
+		// shared by the dense daily-log class. Composite scoring that gives
+		// any FTS match a flat relevance lets recency float the whole wall
+		// over the floor. A graded-relevance scorer must inject at most a
+		// couple of weak candidates, not the class.
+		// Runs with the production confidence floor (GHOST_MIN_SCORE=0.3 in
+		// deployed configs): the graded-relevance gate must push grazed
+		// filler under it.
+		{Name: "novel-graze", Category: "flooding", Query: "castor oil morning dose for joint stiffness session", UseContext: true,
+			MinScore: 0.3, MaxInjected: 2},
+		// Control: a query genuinely about one daily log must still retrieve
+		// it (no over-suppression of the template class).
+		{Name: "log-control", Category: "flooding", Query: "what did I do Sunday morning pancakes gardening", UseContext: true,
+			MinScore: 0.3, Relevant: []string{"daily-log-3"}},
 	}
 }

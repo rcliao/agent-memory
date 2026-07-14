@@ -214,7 +214,19 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			continue // already included from pinned tiers
 		}
 		m := r.Memory
-		score := computeContextScoreWithAccess(m, r.Similarity, now, p.Scope, accessTimes[m.ID])
+		sim := r.Similarity
+		if sim < 0.3 {
+			// No cosine available (FTS/LIKE-sourced candidate): grade
+			// relevance by actual term-match strength instead of the old
+			// flat 0.5 — topically-unmatched filler (graze-one-template-
+			// term, ride recency over the floor) scores near zero here.
+			// Mapped to [0.15, 0.70] so strong keyword matches score
+			// ABOVE the old flat value and zero-match filler falls well
+			// below the MinScore floor.
+			overlap := gradedTermRelevance(p.Query, m.Content, englishStopWords)
+			sim = 0.15 + 0.55*overlap
+		}
+		score := computeContextScoreWithAccess(m, sim, now, p.Scope, accessTimes[m.ID])
 		if directParents[m.ID] {
 			score *= summaryWeight
 		}
@@ -628,9 +640,12 @@ func computeContextScoreWithAccess(m model.Memory, similarity float64, now time.
 	// Relevance: use vector cosine similarity when available (>= 0.3 threshold from
 	// vector search), otherwise use 0.5 base for FTS/LIKE matches. Values below 0.3
 	// are RRF fusion scores (not cosine), and would cripple relevance if used directly.
-	relevance := 0.5 // base relevance for FTS/LIKE matches
-	if similarity >= 0.3 {
-		relevance = similarity // use actual cosine similarity from vector search
+	// similarity carries either a real cosine (vector-sourced) or a graded
+	// term-match relevance in [0.15, 0.70] computed at the call site; both
+	// are usable directly. Zero means "ungraded" (legacy callers) → neutral.
+	relevance := similarity
+	if relevance <= 0 {
+		relevance = 0.5
 	}
 
 	// Recency: exponential decay, half-life of 7 days
@@ -655,6 +670,22 @@ func computeContextScoreWithAccess(m model.Memory, similarity float64, now time.
 	// Kind-specific composite weights, then apply tier as multiplicative modifier
 	w := kindWeights(m.Kind)
 	base := relevance*w.relevance + recency*w.recency + importance*w.importance + accessFreq*w.access
+
+	// Relevance gate: with weak topical evidence, the other signals must
+	// not carry the memory into context — recency/importance are tie-
+	// breakers among relevant candidates, not substitutes for relevance.
+	// Smooth ramp: full strength at relevance ≥0.45 (any real cosine hit
+	// or a strong term match), scaling down toward zero below. This is
+	// what actually stops novel-topic flooding: a graze-one-template-term
+	// filler memory grades ~0.3 relevance and gets ~40% of its composite,
+	// landing under the MinScore floor despite perfect recency.
+	if relevance < 0.45 {
+		gate := (relevance - 0.15) / 0.30
+		if gate < 0.05 {
+			gate = 0.05
+		}
+		base *= gate
+	}
 
 	// Opt-in ACT-R mode (GHOST_ACTR=1): one activation scalar subsumes the
 	// separate recency and access-frequency heuristics (see actr.go).
