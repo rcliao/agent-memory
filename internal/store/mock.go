@@ -252,6 +252,9 @@ func (m *MockStore) List(_ context.Context, p ListParams) ([]model.Memory, error
 		if len(p.Tags) > 0 && !hasAllTags(mem.Tags, p.Tags) {
 			continue
 		}
+		if p.PinnedOnly && !mem.Pinned {
+			continue
+		}
 		nk := mem.NS + ":" + mem.Key
 		if existing, ok := latest[nk]; !ok || mem.Version > existing.Version {
 			latest[nk] = mem

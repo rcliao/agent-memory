@@ -126,6 +126,22 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListPinnedOnly(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	s.Put(ctx, PutParams{NS: "ns", Key: "pinned-rule", Content: "always on", Pinned: true})
+	s.Put(ctx, PutParams{NS: "ns", Key: "episodic-chatter", Content: "one-off exchange"})
+
+	pinned, err := s.List(ctx, ListParams{NS: "ns", PinnedOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pinned) != 1 || pinned[0].Key != "pinned-rule" {
+		t.Errorf("expected only pinned-rule, got %+v", pinned)
+	}
+}
+
 func TestListShowsLatestVersion(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
