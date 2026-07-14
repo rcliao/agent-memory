@@ -74,6 +74,11 @@ var coverageCorpus = []coverageCase{
 	// "make sure to" standing instructions and "let's also <verb>" decisions.
 	{text: "Pika make sure to update our daily research with more papers about agent memory.", class: "boundary"},
 	{text: "Better yet let's also store the research findings into our memories.", class: "decision"},
+	// Live-found 2026-07-14 evening: dense short Chinese facts — "we don't
+	// drink alcohol" is 18 bytes, under the English-tuned 20-byte segment
+	// floor, and negated habits (我們不+verb) had no cue.
+	{text: "我們不喝酒喔", class: "zh-fact"},
+	{text: "我不吃辣，拜託記得。", class: "zh-preference"},
 }
 
 // chatterCorpus must produce ZERO candidates — the false-positive guard.

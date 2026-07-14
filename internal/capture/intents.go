@@ -28,7 +28,7 @@ var intents = []intent{
 	// chatter set holds false positives at zero.
 	{"correction", 0.28, regexp.MustCompile(`(?i)\b(actually|no,|not\s+\w+\s+but|instead of|i\s+meant|correction|rather than|stop\s+\w+ing|don'?t\s+(?:do|use|say))\b|\bthat'?s\s+(?:not\s+right|wrong|incorrect)\b|不對|不是這樣|我(?:說|指)的是|其實(?:是|不是)|錯了|搞錯`)},
 	// Stated preferences: how the user wants things done.
-	{"preference", 0.24, regexp.MustCompile(`(?i)\b(i|we)\s+(prefer|like|love|hate|always|never|usually|tend to)\b|\bprefer(?:s|red)?\b|\buse\s+\S+\s+(?:not|instead of|over|rather than)\b|\bdon'?t\s+(?:use|want|like)\b|\bi'?d\s+rather\b|\bmy\s+preference\b|\bplease\s+always\b|\bgoing\s+forward\b|我(?:比較)?(?:喜歡|偏好|習慣)|比較喜歡|不喜歡|希望你`)},
+	{"preference", 0.24, regexp.MustCompile(`(?i)\b(i|we)\s+(prefer|like|love|hate|always|never|usually|tend to)\b|\bprefer(?:s|red)?\b|\buse\s+\S+\s+(?:not|instead of|over|rather than)\b|\bdon'?t\s+(?:use|want|like)\b|\bi'?d\s+rather\b|\bmy\s+preference\b|\bplease\s+always\b|\bgoing\s+forward\b|我(?:比較)?(?:喜歡|偏好|習慣)|比較喜歡|不喜歡|希望你|我(?:們)?(?:都)?不(?:喝|吃|碰|買|用)`)},
 	// Decisions with rationale.
 	{"decision", 0.22, regexp.MustCompile(`(?i)\b(we|i|let'?s)\s+(decided|chose|will use|are going to|should use|going with|settled on)\b|\blet'?s\s+(?:also\s+)?(?:go\s+with|store|start|keep|track|add|try|schedule)\b|\bthe plan is\b|\bdecision:\b|決定|就(?:選|用|訂)這|說好了`)},
 	// Standing instructions / boundaries: rules about future conduct.
