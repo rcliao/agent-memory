@@ -73,8 +73,8 @@ func TestEdgeInfluenceEval(t *testing.T) {
 
 	// Run context WITH edge expansion (default)
 	resultWith, err := s.Context(ctx, ContextParams{
-		NS:    "eval",
-		Query: query,
+		NS:     "eval",
+		Query:  query,
 		Budget: 10000,
 	})
 	if err != nil {
@@ -194,8 +194,8 @@ func TestEdgeExpansionScoring(t *testing.T) {
 
 	// Get context with edges
 	result, _ := s.Context(ctx, ContextParams{
-		NS:    "eval",
-		Query: "authentication",
+		NS:     "eval",
+		Query:  "authentication",
 		Budget: 10000,
 	})
 
@@ -250,8 +250,8 @@ func TestContradictsScoring(t *testing.T) {
 		seed.ID, contra.ID)
 
 	result, _ := s.Context(ctx, ContextParams{
-		NS:    "eval",
-		Query: "JWT authentication",
+		NS:     "eval",
+		Query:  "JWT authentication",
 		Budget: 10000,
 	})
 

@@ -32,24 +32,24 @@ import (
 
 // HaluMemMemoryPoint is one gold memory fact in a session.
 type HaluMemMemoryPoint struct {
-	Index           int     `json:"index"`
-	MemoryContent   string  `json:"memory_content"`
-	MemoryType      string  `json:"memory_type"`
-	IsUpdate        string  `json:"is_update"` // "True" / "False"
+	Index            int      `json:"index"`
+	MemoryContent    string   `json:"memory_content"`
+	MemoryType       string   `json:"memory_type"`
+	IsUpdate         string   `json:"is_update"` // "True" / "False"
 	OriginalMemories []string `json:"original_memories,omitempty"`
-	Timestamp       string  `json:"timestamp"`
-	EventSource     int     `json:"event_source"`
-	Importance      float64 `json:"importance"`
-	MemorySource    string  `json:"memory_source"`
+	Timestamp        string   `json:"timestamp"`
+	EventSource      int      `json:"event_source"`
+	Importance       float64  `json:"importance"`
+	MemorySource     string   `json:"memory_source"`
 }
 
 // HaluMemQA is one evaluation query attached to a session.
 type HaluMemQA struct {
-	Question     string                  `json:"question"`
-	Answer       string                  `json:"answer"`
-	Evidence     []HaluMemEvidence       `json:"evidence"`
-	Difficulty   string                  `json:"difficulty"`
-	QuestionType string                  `json:"question_type"`
+	Question     string            `json:"question"`
+	Answer       string            `json:"answer"`
+	Evidence     []HaluMemEvidence `json:"evidence"`
+	Difficulty   string            `json:"difficulty"`
+	QuestionType string            `json:"question_type"`
 }
 
 // HaluMemEvidence points to a memory_point by its content (the dataset doesn't
@@ -61,10 +61,10 @@ type HaluMemEvidence struct {
 
 // HaluMemSession bundles memory_points + dialogue + questions for one session.
 type HaluMemSession struct {
-	StartTime       string                 `json:"start_time"`
-	EndTime         string                 `json:"end_time"`
-	MemoryPoints    []HaluMemMemoryPoint   `json:"memory_points"`
-	Questions       []HaluMemQA            `json:"questions"`
+	StartTime    string               `json:"start_time"`
+	EndTime      string               `json:"end_time"`
+	MemoryPoints []HaluMemMemoryPoint `json:"memory_points"`
+	Questions    []HaluMemQA          `json:"questions"`
 	// Dialogue, token counts, etc. are not needed for retrieval-only eval.
 }
 
@@ -110,13 +110,13 @@ func LoadHaluMemJSONL[T any](path string) ([]T, error) {
 
 // HaluMemConfig controls the QA-retrieval benchmark run.
 type HaluMemConfig struct {
-	DatasetPath  string
-	UserLimit    int  // max users to evaluate (0 = all)
-	PerTypeLimit int  // max questions per question_type (0 = no cap)
-	TopK         []int
-	NS           string
+	DatasetPath    string
+	UserLimit      int // max users to evaluate (0 = all)
+	PerTypeLimit   int // max questions per question_type (0 = no cap)
+	TopK           []int
+	NS             string
 	EmbedCachePath string
-	ProgressFunc func(done, total int)
+	ProgressFunc   func(done, total int)
 	// SkipBoundary skips Memory Boundary questions (evidence=0, test of
 	// abstention). Retrieval recall isn't meaningful for them.
 	SkipBoundary bool
@@ -124,9 +124,9 @@ type HaluMemConfig struct {
 	// LLM-judge E2E (optional). When LLM is set, each question goes through
 	// Ghost retrieve → compress → answer → judge for Accuracy (C),
 	// Hallucination (H), and Omission (O). Disabled if nil.
-	LLM      LLMClient
-	Judge    LLMClient // judge LLM (defaults to LLM)
-	JudgeTopK int      // top-K memories to feed the answerer (default 5)
+	LLM       LLMClient
+	Judge     LLMClient // judge LLM (defaults to LLM)
+	JudgeTopK int       // top-K memories to feed the answerer (default 5)
 }
 
 // HaluMemReport holds aggregate benchmark results.

@@ -182,7 +182,7 @@ func TestMockStoreGCStale(t *testing.T) {
 	s.Put(ctx, PutParams{NS: "test", Key: "normal", Content: "old", Priority: "normal"})
 	s.Put(ctx, PutParams{NS: "test", Key: "critical", Content: "protected", Priority: "critical"})
 
-	time.Sleep(time.Millisecond) // ensure cutoff is after CreatedAt
+	time.Sleep(time.Millisecond)     // ensure cutoff is after CreatedAt
 	result, err := s.GCStale(ctx, 0) // 0 threshold = everything is stale
 	if err != nil {
 		t.Fatal(err)

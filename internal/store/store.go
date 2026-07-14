@@ -10,18 +10,18 @@ import (
 
 // PutParams holds parameters for storing a memory.
 type PutParams struct {
-	NS         string
-	Key        string
-	Content    string
-	Kind       string
-	Tags       []string
-	Priority   string
-	Importance float64 // 0.0-1.0; 0 means use default (0.5)
-	Tier       string  // "sensory", "stm", "ltm", "dormant"; empty defaults to "stm"
-	Pinned     bool    // always loaded in context, exempt from decay
-	Meta       string
-	TTL        string // e.g. "7d", "24h", "30m"
-	Files      []FileParam
+	NS           string
+	Key          string
+	Content      string
+	Kind         string
+	Tags         []string
+	Priority     string
+	Importance   float64 // 0.0-1.0; 0 means use default (0.5)
+	Tier         string  // "sensory", "stm", "ltm", "dormant"; empty defaults to "stm"
+	Pinned       bool    // always loaded in context, exempt from decay
+	Meta         string
+	TTL          string // e.g. "7d", "24h", "30m"
+	Files        []FileParam
 	Dedup        bool // if true, skip storing when a similar memory already exists (cosine > 0.82)
 	SkipAutoLink bool // if true, skip auto-linking edges after insert (useful for bulk ingestion/benchmarks)
 }
@@ -71,12 +71,12 @@ type TagInfo struct {
 
 // PeekResult is a lightweight memory index for lazy discovery.
 type PeekResult struct {
-	NS              string         `json:"ns"`
-	PinnedSummary   string         `json:"pinned_summary,omitempty"`
-	RecentTopics    []string       `json:"recent_topics"`
-	MemoryCounts    map[string]int `json:"memory_counts"`
-	HighImportance  []MemoryStub   `json:"high_importance"`
-	TotalEstTokens  map[string]int `json:"total_est_tokens"`
+	NS             string         `json:"ns"`
+	PinnedSummary  string         `json:"pinned_summary,omitempty"`
+	RecentTopics   []string       `json:"recent_topics"`
+	MemoryCounts   map[string]int `json:"memory_counts"`
+	HighImportance []MemoryStub   `json:"high_importance"`
+	TotalEstTokens map[string]int `json:"total_est_tokens"`
 }
 
 // MemoryStub is a lightweight reference to a memory for peek results.
@@ -124,8 +124,8 @@ type ConsolidationNode struct {
 	Kind       string  `json:"kind"`
 	Importance float64 `json:"importance"`
 	EstTokens  int     `json:"est_tokens"`
-	Summary    string  `json:"summary"`   // truncated content
-	Children   int     `json:"children"`  // number of contained memories
+	Summary    string  `json:"summary"`  // truncated content
+	Children   int     `json:"children"` // number of contained memories
 }
 
 // ConsolidateParams holds parameters for creating a consolidation.

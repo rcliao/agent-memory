@@ -23,21 +23,21 @@ func TestValidateNS(t *testing.T) {
 		{"a1-b2_c3", false},
 
 		// Invalid namespaces
-		{"", true},                                                              // empty
-		{":leading", true},                                                      // leading colon
-		{"trailing:", true},                                                     // trailing colon
-		{"double::colon", true},                                                 // consecutive colons
-		{"-1009999999999", false},                                               // negative chat ID (valid)
-		{"relay:chat:-1009999999999", false},                                    // negative chat ID in namespace (valid)
-		{"_starts-with-underscore", true},                                       // segment starts with underscore
-		{"has space", true},                                                     // space
-		{"has/slash", true},                                                     // slash
-		{"has.dot", true},                                                       // dot
-		{"a:", true},                                                            // trailing colon
-		{":a", true},                                                            // leading colon
-		{"a::b", true},                                                          // double colon
-		{string(make([]byte, 129)), true},                                       // too long
-		{"ok:" + string(make([]byte, 130)), true},                               // total too long
+		{"", true},                                // empty
+		{":leading", true},                        // leading colon
+		{"trailing:", true},                       // trailing colon
+		{"double::colon", true},                   // consecutive colons
+		{"-1009999999999", false},                 // negative chat ID (valid)
+		{"relay:chat:-1009999999999", false},      // negative chat ID in namespace (valid)
+		{"_starts-with-underscore", true},         // segment starts with underscore
+		{"has space", true},                       // space
+		{"has/slash", true},                       // slash
+		{"has.dot", true},                         // dot
+		{"a:", true},                              // trailing colon
+		{":a", true},                              // leading colon
+		{"a::b", true},                            // double colon
+		{string(make([]byte, 129)), true},         // too long
+		{"ok:" + string(make([]byte, 130)), true}, // total too long
 	}
 
 	for _, tc := range tests {
@@ -109,7 +109,7 @@ func TestNSFilterMatchNS(t *testing.T) {
 
 func TestNSFilterSQL(t *testing.T) {
 	tests := []struct {
-		filter    string
+		filter     string
 		wantClause string
 		wantArgs   int
 	}{

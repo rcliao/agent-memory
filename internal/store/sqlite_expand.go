@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
 )
 
 // Peek returns a lightweight index of memory state for lazy discovery.
@@ -269,4 +268,3 @@ func (s *SQLiteStore) Consolidate(ctx context.Context, p ConsolidateParams) (*Co
 
 	return &ConsolidateResult{Summary: summary, Edges: edges}, nil
 }
-

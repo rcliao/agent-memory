@@ -75,6 +75,11 @@ func buildFTSQuery(query string) string {
 	if len(terms) == 0 {
 		return ""
 	}
+	// CJK terms are rewritten as bigram phrases to match the segmented
+	// index (see cjk.go); ASCII terms pass through for porter stemming.
+	for i, t := range terms {
+		terms[i] = cjkQueryTerm(t)
+	}
 	return strings.Join(terms, " OR ")
 }
 

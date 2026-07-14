@@ -49,10 +49,10 @@ func TestACTRActivationOrdering(t *testing.T) {
 func TestACTRActivationBounds(t *testing.T) {
 	now := time.Now()
 	cases := []model.Memory{
-		{CreatedAt: now},                                       // zero-age
+		{CreatedAt: now}, // zero-age
 		{CreatedAt: now.Add(-100000 * time.Hour)},              // very old, never accessed
 		{CreatedAt: now.Add(-time.Hour), AccessCount: 1000000}, // pathological hot
-		{},                                                     // zero-value memory
+		{}, // zero-value memory
 	}
 	for i, m := range cases {
 		p := actrActivation(m, now)
