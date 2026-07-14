@@ -23,11 +23,16 @@ type intent struct {
 // carry no explicit cue. Cue names are also used by inferKind.
 var intents = []intent{
 	// A user actively correcting the agent is the highest-value signal.
-	{"correction", 0.28, regexp.MustCompile(`(?i)\b(actually|no,|not\s+\w+\s+but|instead of|i\s+meant|correction|rather than|stop\s+\w+ing|don'?t\s+(?:do|use|say))\b`)},
+	// CJK alternations carry no \b anchors — Chinese has no word boundaries;
+	// the coverage corpus (eval_coverage_test.go) grades every branch and the
+	// chatter set holds false positives at zero.
+	{"correction", 0.28, regexp.MustCompile(`(?i)\b(actually|no,|not\s+\w+\s+but|instead of|i\s+meant|correction|rather than|stop\s+\w+ing|don'?t\s+(?:do|use|say))\b|\bthat'?s\s+(?:not\s+right|wrong|incorrect)\b|不對|不是這樣|我(?:說|指)的是|其實(?:是|不是)|錯了|搞錯`)},
 	// Stated preferences: how the user wants things done.
-	{"preference", 0.24, regexp.MustCompile(`(?i)\b(i|we)\s+(prefer|like|love|hate|always|never|usually|tend to)\b|\bprefer(?:s|red)?\b|\buse\s+\S+\s+(?:not|instead of|over|rather than)\b|\bdon'?t\s+(?:use|want|like)\b`)},
+	{"preference", 0.24, regexp.MustCompile(`(?i)\b(i|we)\s+(prefer|like|love|hate|always|never|usually|tend to)\b|\bprefer(?:s|red)?\b|\buse\s+\S+\s+(?:not|instead of|over|rather than)\b|\bdon'?t\s+(?:use|want|like)\b|\bi'?d\s+rather\b|\bmy\s+preference\b|\bplease\s+always\b|\bgoing\s+forward\b|我(?:比較)?(?:喜歡|偏好|習慣)|比較喜歡|不喜歡|希望你`)},
 	// Decisions with rationale.
-	{"decision", 0.22, regexp.MustCompile(`(?i)\b(we|i|let'?s)\s+(decided|chose|will use|are going to|should use|going with|settled on)\b|\bthe plan is\b|\bdecision:\b`)},
+	{"decision", 0.22, regexp.MustCompile(`(?i)\b(we|i|let'?s)\s+(decided|chose|will use|are going to|should use|going with|settled on)\b|\blet'?s\s+go\s+with\b|\bthe plan is\b|\bdecision:\b|決定|就(?:選|用|訂)這|說好了`)},
+	// Standing instructions / boundaries: rules about future conduct.
+	{"boundary", 0.26, regexp.MustCompile(`(?i)\b(?:please\s+)?never\s+(?:share|send|post|tell|mention|give|use)\b|\bfrom\s+now\s+on\b|\bdon'?t\s+(?:send|share|text|message|call|post|tell|schedule|book)\b|以後|從現在開始|之後都|不要(?:再)?(?:傳|放|加|用|說|提)|別再|千萬不要|記得(?:要|以後)`)},
 	// Gotchas / confirmed learnings worth not re-discovering.
 	{"gotcha", 0.18, regexp.MustCompile(`(?i)\b(turns out|gotcha|the trick is|note that|remember to|important:|caveat|watch out|by default|the fix (?:is|was)|root cause)\b`)},
 	// Procedural / how-to: imperatives and command-shaped text. CLI verbs are
@@ -35,7 +40,7 @@ var intents = []intent{
 	// or "make" don't false-fire (e.g. "Go code", "make sense").
 	{"procedural", 0.16, regexp.MustCompile(`(?i)^(?:to\s+\w+|first|then|next|step\s*\d|(?:npm|git|make|go|docker|kubectl|cargo|pip|yarn|pnpm)\s+\w)|\b(?:run|deploy|install|configure)\s+\S+|(?:^|\s)\$\s+\S+|` + "`[^`]+`")},
 	// Identity / stable facts about the user or their world.
-	{"fact", 0.12, regexp.MustCompile(`(?i)\b(my|our)\s+\w+\s+(?:is|are|=)\b|\bi'?m\s+(?:a|an|the)\b|\bis\s+(?:located|based|set to)\b|\b\d+(?:\.\d+)?\s*(?:%|kg|lb|mb|gb|ms|hrs?|hours?|days?|px|x)\b`)},
+	{"fact", 0.12, regexp.MustCompile(`(?i)\b(my|our)\s+(?:\w+\s+){1,3}(?:is|are|=)\b|\bi'?m\s+(?:a|an|the)\b|\bi'?m\s+allergic\b|\bis\s+(?:located|based|set to)\b|\b\d+(?:\.\d+)?\s*(?:%|kg|lb|mb|gb|ms|hrs?|hours?|days?|px|x)\b|過敏|生日是|我住在`)},
 }
 
 // emphasisRe matches explicit emphasis markers that raise importance.
@@ -114,7 +119,7 @@ func inferKind(cues []string) string {
 	switch {
 	case has("procedural"):
 		return "procedural"
-	case has("preference"), has("decision"), has("fact"), has("gotcha"), has("correction"):
+	case has("preference"), has("decision"), has("fact"), has("gotcha"), has("correction"), has("boundary"):
 		return "semantic"
 	default:
 		return "episodic"
