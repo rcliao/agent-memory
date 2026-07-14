@@ -22,6 +22,8 @@ type nurtureConditions struct {
 type nurtureReport struct {
 	ProbeHits, ProbeTotal int
 	ProbeMisses           []string // "day 10 q=... missing=..."
+	AvoidViolations       []string // forbidden content that appeared in a probe context
+	ProbeContamination    int      // probes whose context contained noise-thing content
 	Promoted, Deleted     int
 	LiveTotal             int
 	LiveSensory           int
@@ -108,15 +110,23 @@ func growNurture(t *testing.T, s *SQLiteStore, kit NurtureKit, cond nurtureCondi
 				seq++
 			}
 		}
-		// Ambient noise: the background chatter of a real life.
+		// Ambient noise: the background chatter of a real life. Every Nth
+		// exchange is phrased as a plausible preference so capture STORES it
+		// — the hard kind of noise.
 		if kit.NoisePerDay > 0 && day <= kit.FinalDay-7 {
 			for n := 0; n < kit.NoisePerDay; n++ {
 				thing := nurtureNoiseThings[(day*kit.NoisePerDay+n)%len(nurtureNoiseThings)]
 				other := nurtureNoiseThings[(day+n*5+3)%len(nurtureNoiseThings)]
-				clockAt(dayStart.Add(time.Duration(seq) * time.Hour))
-				logExchange(day, seq, fmt.Sprintf(
+				text := fmt.Sprintf(
 					"This morning the %s ended up next to the %s again, day %d of the mystery.",
-					thing, other, day), false)
+					thing, other, day)
+				if kit.NoiseIntentEvery > 0 && n%kit.NoiseIntentEvery == 0 {
+					text = fmt.Sprintf(
+						"I always keep the %s right next to the %s on the counter, day %d.",
+						thing, other, day)
+				}
+				clockAt(dayStart.Add(time.Duration(seq) * time.Hour))
+				logExchange(day, seq, text, false)
 				seq++
 			}
 		}
@@ -149,6 +159,15 @@ func growNurture(t *testing.T, s *SQLiteStore, kit NurtureKit, cond nurtureCondi
 						rep.ProbeMisses = append(rep.ProbeMisses,
 							fmt.Sprintf("day %d q=%q missing=%q", day, probe.Query, want))
 					}
+				}
+				for _, avoid := range probe.AvoidContent {
+					if strings.Contains(joined, avoid) {
+						rep.AvoidViolations = append(rep.AvoidViolations,
+							fmt.Sprintf("day %d q=%q contains forbidden %q", day, probe.Query, avoid))
+					}
+				}
+				if isNurtureNoise(joined) {
+					rep.ProbeContamination++
 				}
 			}
 		}
@@ -320,4 +339,64 @@ func TestEvalNurtureAblation(t *testing.T) {
 		t.Errorf("reflect lost recall: full %d hits vs no-reflect %d — forgetting the wrong things",
 			full.ProbeHits, noReflect.ProbeHits)
 	}
+}
+
+// TestEvalNurtureParenting — the parenting loop: repeated correction becomes
+// conduct, spaced encouragement becomes personality, one-off instructions
+// stay transient, and stored noise never crowds the signal.
+func TestEvalNurtureParenting(t *testing.T) {
+	s := newTestStore(t)
+	kit := ParentingNurtureKit()
+	rep := growNurture(t, s, kit, nurtureConditions{Reflect: true, Distill: true})
+	t.Logf("parenting: probes %d/%d promoted=%d live=%d noiseLive=%d noiseLTM=%d contamination=%d avoid=%d",
+		rep.ProbeHits, rep.ProbeTotal, rep.Promoted, rep.LiveTotal,
+		rep.NoiseLive, rep.NoiseInLTM, rep.ProbeContamination, len(rep.AvoidViolations))
+
+	t.Run("BehaviorChange", func(t *testing.T) {
+		// The conduct rule must be in context whenever the situation recurs —
+		// that is the store's entire contribution to behavior change.
+		if len(rep.ProbeMisses) > 0 {
+			t.Errorf("shaped behavior/trait missing from context:\n%s", strings.Join(rep.ProbeMisses, "\n"))
+		}
+	})
+	t.Run("PersonalityEarnedPermanence", func(t *testing.T) {
+		// Spaced encouragement should promote the trait; the recurring
+		// conduct rule likewise.
+		var tier string
+		s.db.QueryRow(`SELECT tier FROM memories WHERE deleted_at IS NULL AND ns = ?
+			AND key NOT LIKE 'exchange-%' AND content LIKE '%wordplay%' ORDER BY
+			CASE tier WHEN 'ltm' THEN 0 ELSE 1 END LIMIT 1`, kit.NS).Scan(&tier)
+		if tier != "ltm" {
+			t.Errorf("spaced-encouraged trait should reach ltm, best tier %q", tier)
+		}
+		if rep.Promoted == 0 {
+			t.Error("no promotions across seven shaped weeks")
+		}
+	})
+	t.Run("TransientStaysTransient", func(t *testing.T) {
+		if len(rep.AvoidViolations) > 0 {
+			t.Errorf("one-off instruction leaked into late context:\n%s", strings.Join(rep.AvoidViolations, "\n"))
+		}
+		var tier string
+		s.db.QueryRow(`SELECT tier FROM memories WHERE deleted_at IS NULL AND ns = ?
+			AND key NOT LIKE 'exchange-%' AND content LIKE '%extra formal%' LIMIT 1`, kit.NS).Scan(&tier)
+		if tier == "ltm" {
+			t.Error("'just for today' instruction became a long-term trait")
+		}
+	})
+	t.Run("SignalOverNoise", func(t *testing.T) {
+		if rep.NoiseInLTM > 0 {
+			t.Errorf("%d stored-noise memories earned ltm", rep.NoiseInLTM)
+		}
+		if rep.ProbeContamination > 0 {
+			t.Errorf("%d probe contexts contaminated by noise content", rep.ProbeContamination)
+		}
+		// Stored noise may linger in stm, but the signal must not drown:
+		// live signal (non-noise distilled) should at least match live noise.
+		signal := rep.LiveTotal - rep.LiveSensory - rep.NoiseLive - len(kit.Onboarding)
+		if rep.NoiseLive > signal {
+			t.Errorf("noise outnumbers signal in live tiers: noise=%d signal=%d (stale-stm accumulation?)",
+				rep.NoiseLive, signal)
+		}
+	})
 }
