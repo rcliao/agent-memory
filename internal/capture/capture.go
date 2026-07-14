@@ -13,6 +13,7 @@
 package capture
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 
@@ -75,6 +76,12 @@ func Extract(text string, opts Options) []Candidate {
 
 	for _, seg := range segment(text, filter) {
 		trimmed := strings.TrimSpace(seg)
+		// Bridge-generated media placeholders ("(sticker) [emoji: ...]",
+		// "(photo)") are transport metadata, not user prose — entity-bearing
+		// set names were distilling as memories (found live 2026-07-14).
+		if mediaPlaceholderRe.MatchString(trimmed) {
+			continue
+		}
 		// CJK packs far more meaning per byte ("我們不喝酒" is a durable
 		// family fact in 15 bytes), so CJK-bearing segments get a lower
 		// floor; the cue/entity gate still drops short chatter.
@@ -248,3 +255,6 @@ func containsCJKRune(s string) bool {
 	}
 	return false
 }
+
+// mediaPlaceholderRe matches transport-layer media placeholder segments.
+var mediaPlaceholderRe = regexp.MustCompile(`^\((?:sticker|photo|video|voice(?:\s+message)?|file|document|audio)\)`)
