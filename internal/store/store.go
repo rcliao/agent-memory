@@ -51,6 +51,10 @@ type ListParams struct {
 	Tags     []string
 	Limit    int
 	KeysOnly bool
+	// PinnedOnly restricts results to pinned memories. Lets clients fetch
+	// the always-on set (e.g. a system-prompt snapshot) without Context()'s
+	// budget-packed backfill and without Get()'s access-count side effects.
+	PinnedOnly bool
 }
 
 // RmParams holds parameters for deleting a memory.

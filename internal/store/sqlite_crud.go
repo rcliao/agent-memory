@@ -794,6 +794,10 @@ func (s *SQLiteStore) List(ctx context.Context, p ListParams) ([]model.Memory, e
 		args = append(args, "%\""+tag+"\"%")
 	}
 
+	if p.PinnedOnly {
+		where = append(where, "m.pinned = 1")
+	}
+
 	query := fmt.Sprintf(`
 		SELECT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
 		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at,
