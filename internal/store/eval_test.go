@@ -936,13 +936,21 @@ func TestEvalAccessPromotion(t *testing.T) {
 		t.Fatalf("expected initial access_count=0, got %d", accessCount)
 	}
 
-	// Simulate agent accessing this memory 55 times via Get (promote threshold is >50)
+	// Simulate agent accessing this memory 55 times via Get (promote threshold
+	// is >50), spread across 4 distinct days: promotion requires SPACED
+	// rehearsal (>=3 distinct access-log days), not raw count — massed
+	// same-day access is ambient exposure and must not promote (see the
+	// spaced-access gates in Reflect and eval_lifecycle_spaced_test.go).
+	base := time.Now().UTC().Add(-96 * time.Hour)
 	for i := 0; i < 55; i++ {
+		day := i % 4
+		s.SetClock(func() time.Time { return base.Add(time.Duration(day) * 24 * time.Hour) })
 		_, err := s.Get(ctx, GetParams{NS: "project:test", Key: "useful-pattern"})
 		if err != nil {
 			t.Fatalf("get #%d: %v", i, err)
 		}
 	}
+	s.SetClock(time.Now)
 
 	// Verify access count incremented
 	s.db.QueryRow(`SELECT access_count FROM memories WHERE id = ?`, mem.ID).Scan(&accessCount)

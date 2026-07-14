@@ -126,3 +126,36 @@ func (s *SQLiteStore) pruneAccessLog(ctx context.Context) (int64, error) {
 	}
 	return total, nil
 }
+
+// loadSpacedAccessDays returns, for each live memory (optionally filtered by
+// namespace), the number of distinct UTC days carrying at least one logged
+// access. This is the spaced-rehearsal signal the lifecycle rules use:
+// access_count counts every context injection (ambient exposure), while
+// distinct access days measure whether a memory keeps proving relevant across
+// time. Best-effort — callers treat a missing entry as "no log data".
+func (s *SQLiteStore) loadSpacedAccessDays(ctx context.Context, ns string) (map[string]int, error) {
+	q := `SELECT a.memory_id, COUNT(DISTINCT substr(a.accessed_at, 1, 10))
+		FROM memory_accesses a
+		JOIN memories m ON m.id = a.memory_id
+		WHERE m.deleted_at IS NULL`
+	args := []interface{}{}
+	if ns != "" {
+		q += ` AND m.ns = ?`
+		args = append(args, ns)
+	}
+	q += ` GROUP BY a.memory_id`
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var days int
+		if rows.Scan(&id, &days) == nil {
+			out[id] = days
+		}
+	}
+	return out, rows.Err()
+}

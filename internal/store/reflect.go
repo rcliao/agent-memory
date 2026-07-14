@@ -218,6 +218,10 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 	result := &ReflectResult{}
 
 	// Load applicable rules
+	// Spaced-rehearsal signal for the system lifecycle rules (see the gates
+	// in the rule loop). Best-effort: a nil map degrades to legacy behavior.
+	spacedDays, _ := s.loadSpacedAccessDays(ctx, p.NS)
+
 	rules, err := s.RuleList(ctx, p.NS)
 	if err != nil {
 		return nil, fmt.Errorf("load rules: %w", err)
@@ -311,6 +315,24 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 			}
 			if rule.Action.Op == "ARCHIVE" && m.Tier == "archived" {
 				continue
+			}
+			// Spaced-access gates (lifecycle review 2026-07-14): access_count
+			// counts every context injection, so raw counts measure ambient
+			// exposure, not use — useful memories hit the prune threshold
+			// within hours and were demoted at priority 90 before the
+			// promotion rule at 50 ever saw them (promoted=0 in production;
+			// ~2.5k dormant casualties). Distinct access-log days separate
+			// real rehearsal from massed injection: promotion requires >=3
+			// distinct days; the prune spares spaced memories and grants a
+			// 72h grace window to earn spacing. Memories with no log rows
+			// (pre-log data, benchmark stores) keep legacy behavior.
+			if days, logged := spacedDays[m.ID]; logged {
+				if rule.ID == "sys-promote-to-ltm" && days < 3 {
+					continue
+				}
+				if rule.ID == "sys-prune-low-utility" && (days >= 3 || ageHours < 72) {
+					continue
+				}
 			}
 			// D2 spaced-repetition: a proven-useful memory resists idle demotion.
 			// The stale-ltm demote threshold scales with the memory's ease
