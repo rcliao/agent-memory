@@ -196,6 +196,25 @@ misses never exists downstream. Eval-first plan, measurement SHIPPED:
   generalized); provenance/trust tags on write (MemGhost write-side defense);
   correction-class durability (with supersede fallback).
 
+## Behavior render bench (2026-07-15) — memory→behavior measured ghost-side
+Owner question: rules in memory visibly don't change behavior (browser-tool
+rule ignored in production). Before shell builds anything, ghost's
+TestBehaviorRenderBench (env-gated GHOST_BEHAVIOR_BENCH=1; mechanical
+compliance grading — length/price/secrecy/format; haiku, n=12/condition)
+measured three renderings of the SAME store:
+| condition | compliance |
+|---|---|
+| flat pinned wall (today) | 7/12 — short-answers rule obeyed 0/4 |
+| imperative "Standing rules" section | **10/12** |
+| section + per-turn trigger reminder | 8/12 (no gain; one "violation" was a clarifying question — grader N/A case) |
+**Verdict**: ship the standing-rules render shell-side (cheap, +25pt);
+DEFER the trigger machinery (no measured gain at this scale). Grader
+refinements before finer claims: length-threshold sensitivity,
+clarifying-question = N/A. Phase-2 nurture rubric seeds from this bench
+(same rules, mechanical grading, grow samples / swap models). Nurture
+Phase-1 addition still worthwhile: RuleSalience metrics (rank/position of
+matching rule at probe time).
+
 ## Retrieval-quality findings (2026-07-13/14 live-query reviews)
 - **Graded relevance + relevance gate SHIPPED (eval-first)**: the flat "any FTS match = 0.5 relevance" let recency float topically-empty filler over the floor. New: term-match-graded relevance (CJK-aware) + a gate that scales the composite down when relevance <0.45 — recency/importance are tie-breakers among relevant candidates, not substitutes. Proven by the new `flooding` eval slice: pre-fix FAIL (4 injected for a novel topic), post-fix 14/14. Side-win: freshness-update slice 0.14→**1.00** (fresh fact finally rank-0); personal meanMRR 0.790→**0.821**.
 - **NEXT EVAL CASE (defined by the live review, not yet modeled)**: vector-path flooding — live memories carry embeddings, and weak-but-real cosine (~0.3–0.45 semantic adjacency: meal memos vs a supplement question) bypasses the term-grading path. The FTS-only eval cannot see this; the embedded personal-eval variant (GHOST_PERSONAL_EMBED=1) needs a flooding scenario, then the gate curve gets tuned against it. This is the eval-catches-next-improvement loop working as designed.
