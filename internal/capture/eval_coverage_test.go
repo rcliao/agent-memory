@@ -79,6 +79,12 @@ var coverageCorpus = []coverageCase{
 	// floor, and negated habits (我們不+verb) had no cue.
 	{text: "我們不喝酒喔", class: "zh-fact"},
 	{text: "我不吃辣，拜託記得。", class: "zh-preference"},
+	// Health events — two live misses in two days (finger cut while cooking
+	// 2026-07-14; post-breakfast upset + Wakamoto 2026-07-15). The premium
+	// memory class for this household.
+	{text: "早餐後拉肚子，吃wakamoto", class: "zh-health"},
+	{text: "沒注意到我切到手指了，看起來是沒流血", class: "zh-health"},
+	{text: "今天頭痛了一整個下午，吃了半顆止痛藥", class: "zh-health"},
 }
 
 // chatterCorpus must produce ZERO candidates — the false-positive guard.
@@ -127,7 +133,7 @@ func TestEvalCaptureCoverage(t *testing.T) {
 
 	classes := []string{"preference", "correction", "decision", "boundary", "fact", "procedural",
 		"zh-preference", "zh-correction", "zh-decision", "zh-boundary", "zh-fact",
-		"zh-entity", "zh-multisent", "en-entity"}
+		"zh-entity", "zh-multisent", "en-entity", "zh-health"}
 	t.Log("class          coverage  knownGaps")
 	totalHit, totalAll := 0, 0
 	for _, cl := range classes {

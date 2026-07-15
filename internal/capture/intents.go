@@ -31,6 +31,9 @@ var intents = []intent{
 	{"preference", 0.24, regexp.MustCompile(`(?i)\b(i|we)\s+(prefer|like|love|hate|always|never|usually|tend to)\b|\bprefer(?:s|red)?\b|\buse\s+\S+\s+(?:not|instead of|over|rather than)\b|\bdon'?t\s+(?:use|want|like)\b|\bi'?d\s+rather\b|\bmy\s+preference\b|\bplease\s+always\b|\bgoing\s+forward\b|我(?:比較)?(?:喜歡|偏好|習慣)|比較喜歡|不喜歡|希望你|我(?:們)?(?:都)?不(?:喝|吃|碰|買|用)`)},
 	// Decisions with rationale.
 	{"decision", 0.22, regexp.MustCompile(`(?i)\b(we|i|let'?s)\s+(decided|chose|will use|are going to|should use|going with|settled on)\b|\blet'?s\s+(?:also\s+)?(?:go\s+with|store|start|keep|track|add|try|schedule)\b|\bthe plan is\b|\bdecision:\b|決定|就(?:選|用|訂)這|說好了`)},
+	// Health events: symptoms, injuries, remedies — the premium episodic
+	// class for a family agent (two live misses in two days before this cue).
+	{"health", 0.26, regexp.MustCompile(`(?i)(?:allergic|nauseous|dizzy|fever|headache|injured|bleeding|rash|threw up)|拉肚子|不舒服|受傷|切到|流血|發燒|頭痛|想吐|過敏|起疹|吃了.{0,6}(?:藥|止痛)|藥膏`)},
 	// Standing instructions / boundaries: rules about future conduct.
 	{"boundary", 0.26, regexp.MustCompile(`(?i)\b(?:please\s+)?never\s+(?:share|send|post|tell|mention|give|use)\b|\bfrom\s+now\s+on\b|\bdon'?t\s+(?:send|share|text|message|call|post|tell|schedule|book)\b|\bmake\s+sure\s+(?:to|you|we)\b|\bbe\s+sure\s+to\b|以後|從現在開始|之後都|不要(?:再)?(?:傳|放|加|用|說|提)|別再|千萬不要|記得(?:要|以後)`)},
 	// Gotchas / confirmed learnings worth not re-discovering.
@@ -121,6 +124,8 @@ func inferKind(cues []string) string {
 		return "procedural"
 	case has("preference"), has("decision"), has("fact"), has("gotcha"), has("correction"), has("boundary"):
 		return "semantic"
+	case has("health"):
+		return "episodic"
 	default:
 		return "episodic"
 	}
