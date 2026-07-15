@@ -27,7 +27,7 @@ import (
 // split construction "moved/migrated/switched/changed <object> from X to Y" —
 // the lifecycle eval caught that requiring the adjacent form ("moved to")
 // missed the most natural phrasing and silently skipped supersede detection.
-var changeCueRe = regexp.MustCompile(`(?i)\b(switched (from|to)|now use[sd]?|no longer|instead of|replaced|moved to|migrated to|updated to|deprecated|superseded|(moved|migrated|switched|changed)\b[^.!?]{0,60}\bfrom\b[^.!?]{0,60}\bto\b)`)
+var changeCueRe = regexp.MustCompile(`(?i)\b(switched (from|to)|now use[sd]?|no longer|instead of|replaced|moved to|migrated to|updated to|deprecated|superseded|(moved|migrated|switched|changed)\b[^.!?]{0,60}\bfrom\b[^.!?]{0,60}\bto\b)|其實(?:是|不是)|而不是|搞錯|記錯|改成|換成|更正|已經不(?:是|用)|錯了`)
 
 // freshnessEnabled reports whether supersede detection is active. Default ON
 // (validated as a net win on the personal-agent eval: meanMRR 0.745→0.790); set
@@ -47,13 +47,13 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 	}
 
 	newEnts := entity.Extract(content)
-	if len(newEnts) == 0 {
-		return
-	}
 	newSet := make(map[string]bool, len(newEnts))
 	for _, e := range newEnts {
 		newSet[e.Text] = true
 	}
+	// Fallback signal for everyday facts with no NAMED entities (roses,
+	// berries): distinctive-token overlap, same tokenizer as write triage.
+	newTokens := distinctiveTokens(content)
 
 	// Scan recent latest-version memories in the same namespace, excluding this
 	// memory and its own key. Pick the one sharing the most named entities.
@@ -64,6 +64,7 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 			WHERE deleted_at IS NULL GROUP BY ns, key
 		) l ON m.ns = l.ns AND m.key = l.key AND m.version = l.mv
 		WHERE m.ns = ? AND m.deleted_at IS NULL AND m.id <> ? AND m.key <> ?
+		  AND m.tier != 'sensory'
 		ORDER BY m.created_at DESC LIMIT 100`, ns, newID, key)
 	if err != nil {
 		return
@@ -77,18 +78,29 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 		if err := rows.Scan(&id, &k, &c); err != nil {
 			continue
 		}
+		// Named-entity overlap counts double; distinctive-token overlap is
+		// the fallback signal for common-noun facts.
 		overlap := 0
 		for _, e := range entity.Extract(c) {
 			if newSet[e.Text] {
-				overlap++
+				overlap += 2
 			}
+		}
+		shared := 0
+		for tok := range distinctiveTokens(c) {
+			if newTokens[tok] {
+				shared++
+			}
+		}
+		if shared >= 2 {
+			overlap += shared
 		}
 		if overlap > bestOverlap {
 			bestOverlap = overlap
 			bestKey = k
 		}
 	}
-	if bestOverlap == 0 || bestKey == "" {
+	if bestOverlap < 2 || bestKey == "" {
 		return
 	}
 
@@ -108,6 +120,20 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 	_, _ = s.CreateEdge(ctx, EdgeParams{
 		FromNS: ns, FromKey: key, ToNS: ns, ToKey: bestKey, Rel: "contradicts",
 	})
+
+	// Reconsolidation: the correction inherits the stale fact's standing
+	// BEFORE the demotion — the new trace takes over the old trace's
+	// strength, so an unrehearsed correction cannot rank below the
+	// well-rehearsed fact it replaces.
+	var oldImp float64
+	_ = s.db.QueryRowContext(ctx, `
+		SELECT importance FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
+		ORDER BY version DESC LIMIT 1`, ns, bestKey).Scan(&oldImp)
+	if oldImp > 0 {
+		_, _ = s.db.ExecContext(ctx, `
+			UPDATE memories SET importance = MAX(importance, ?) WHERE id = ? AND deleted_at IS NULL`,
+			oldImp, newID)
+	}
 
 	// Diminish the superseded memory's importance (latest version row).
 	_, _ = s.db.ExecContext(ctx, `

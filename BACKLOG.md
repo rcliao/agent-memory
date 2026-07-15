@@ -105,10 +105,14 @@ reflect), assert the memory GROWS UP right. Four properties in
 EarnedPermanence (spaced rehearsal → ltm), GracefulForgetting (one-offs decay,
 sensory dies), CorrectionWins (day-14 correction outranks the stale fact).
 All green on the current stack — and the first run already caught two things:
-- **Supersede entity gap (real, documented in TestEvalNurtureSupersedeFired)**:
-  corrections over common-noun facts never fire detectSupersede (needs shared
-  NAMED entities) — 0 contradicts edges, stale fact keeps full importance.
-  Fix: distinctive-term-overlap fallback; assert the diagnostic test then.
+- **Supersede entity gap — FIXED (2026-07-15, CORRECT disposition)**:
+  detectSupersede gains CJK change cues (其實是/而不是/記錯/搞錯/改成/換成…),
+  a distinctive-term-overlap fallback for common-noun facts (entities count
+  double, tokens are the floor), sensory-tier exclusion, and RECONSOLIDATION —
+  the correction inherits the stale fact's importance before demoting it, so
+  an unrehearsed correction can't rank below the rehearsed fact it replaces.
+  TestEvalNurtureSupersedeFired flipped from logged diagnostic to assertion;
+  TestEvalSupersedeCJKCorrection encodes the real raspberry/cranberry case.
 - **Unrehearsed corrections fade below the score floor within ~4 weeks** on
   the FTS-only path (paraphrase queries can't reach them; term queries can).
   The embedded/reranked variant of this kit (GHOST_PERSONAL_EMBED pattern)

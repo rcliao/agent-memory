@@ -400,3 +400,17 @@ func TestEvalNurtureParenting(t *testing.T) {
 		}
 	})
 }
+
+// TestEvalNurtureSupersedeFired: the day-14 correction ("we moved the roses
+// from the front yard to the back patio") must trigger freshness supersede
+// against the stale fact even though these are common nouns with no NAMED
+// entities — the distinctive-term fallback closes what was a documented gap.
+func TestEvalNurtureSupersedeFired(t *testing.T) {
+	s := newTestStore(t)
+	growNurture(t, s, DefaultNurtureKit(), nurtureConditions{Reflect: true, Distill: true})
+	var edges int
+	s.db.QueryRow(`SELECT COUNT(*) FROM memory_edges WHERE rel = 'contradicts'`).Scan(&edges)
+	if edges == 0 {
+		t.Fatal("correction produced no contradicts edge — supersede did not fire on common-noun facts")
+	}
+}

@@ -78,3 +78,41 @@ func TestEvalWriteTriageReinforce(t *testing.T) {
 		t.Fatal("different days' memos falsely merged")
 	}
 }
+
+// The CORRECT disposition, on the real live case (2026-07-14): mami corrected
+// her food records — 其實是吃了覆盆子而不是蔓越莓 — and the correction
+// distilled, but supersede never fired: the change-cue regex was English-only
+// and the matcher required shared NAMED entities. The correction must
+// (a) create a contradicts edge to the stale fact, (b) diminish the stale
+// fact's importance, and (c) inherit the stale fact's standing
+// (reconsolidation: the new trace takes over the old trace's strength).
+func TestEvalSupersedeCJKCorrection(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	if _, err := s.Put(ctx, PutParams{NS: "agent:t", Key: "breakfast-berries",
+		Content: "早餐吃了蔓越莓和優格，配全麥吐司", Kind: "episodic", Tier: "stm", Importance: 0.8}); err != nil {
+		t.Fatalf("put stale: %v", err)
+	}
+	corr, err := s.Put(ctx, PutParams{NS: "agent:t", Key: "correction-berries",
+		Content: "其實是吃了覆盆子而不是蔓越莓，水果memo記錯了", Kind: "semantic", Tier: "stm", Importance: 0.5})
+	if err != nil {
+		t.Fatalf("put correction: %v", err)
+	}
+
+	var edges int
+	s.db.QueryRow(`SELECT COUNT(*) FROM memory_edges WHERE rel = 'contradicts'`).Scan(&edges)
+	if edges == 0 {
+		t.Fatal("CJK correction fired no supersede (change cues English-only / entity-only matching)")
+	}
+	var staleImp float64
+	s.db.QueryRow(`SELECT importance FROM memories WHERE key = 'breakfast-berries' AND deleted_at IS NULL`).Scan(&staleImp)
+	if staleImp >= 0.8 {
+		t.Errorf("stale fact importance not diminished: %.2f", staleImp)
+	}
+	var corrImp float64
+	s.db.QueryRow(`SELECT importance FROM memories WHERE id = ?`, corr.ID).Scan(&corrImp)
+	if corrImp < 0.8 {
+		t.Errorf("correction should inherit the stale fact's standing (want >= 0.8), got %.2f", corrImp)
+	}
+}
