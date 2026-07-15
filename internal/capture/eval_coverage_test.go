@@ -85,6 +85,11 @@ var coverageCorpus = []coverageCase{
 	{text: "早餐後拉肚子，吃wakamoto", class: "zh-health"},
 	{text: "沒注意到我切到手指了，看起來是沒流血", class: "zh-health"},
 	{text: "今天頭痛了一整個下午，吃了半顆止痛藥", class: "zh-health"},
+	// Chinese turns-out/conclusion markers — three live misses (Koda sensor
+	// diagnosis, transit tap-card discovery, cook-eggs-longer lesson).
+	{text: "看來我水煮蛋還是要煮熟一點，半熟的可能讓肚子不舒服", class: "zh-gotcha"},
+	{text: "原來西雅圖的輕軌上下車都要刷卡", class: "zh-gotcha"},
+	{text: "居然上下車都要tap信用卡，跟台北不一樣", class: "zh-gotcha"},
 }
 
 // chatterCorpus must produce ZERO candidates — the false-positive guard.
@@ -133,7 +138,7 @@ func TestEvalCaptureCoverage(t *testing.T) {
 
 	classes := []string{"preference", "correction", "decision", "boundary", "fact", "procedural",
 		"zh-preference", "zh-correction", "zh-decision", "zh-boundary", "zh-fact",
-		"zh-entity", "zh-multisent", "en-entity", "zh-health"}
+		"zh-entity", "zh-multisent", "en-entity", "zh-health", "zh-gotcha"}
 	t.Log("class          coverage  knownGaps")
 	totalHit, totalAll := 0, 0
 	for _, cl := range classes {
