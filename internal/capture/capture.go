@@ -107,6 +107,13 @@ func Extract(text string, opts Options) []Candidate {
 		if len(cues) == 0 && len(ents) == 0 {
 			continue
 		}
+		// Entity-only pure questions are inquiries ABOUT the world, not facts
+		// about the asker ("你們知道Paze嗎？" made Paze a "memory" — 4 live
+		// FPs). A question still captures when an intent cue fired or when it
+		// states the asker's own plan (first-person marker present).
+		if len(cues) == 0 && isPureQuestion(trimmed) && !hasFirstPerson(trimmed) {
+			continue
+		}
 
 		imp := importance(trimmed, cues, ents)
 		if imp < opts.MinSalience {
@@ -258,3 +265,33 @@ func containsCJKRune(s string) bool {
 
 // mediaPlaceholderRe matches transport-layer media placeholder segments.
 var mediaPlaceholderRe = regexp.MustCompile(`^\((?:sticker|photo|video|voice(?:\s+message)?|file|document|audio)\)`)
+
+// isPureQuestion reports whether the segment reads as an interrogative:
+// question-mark terminated, or carrying CJK question particles.
+func isPureQuestion(s string) bool {
+	t := strings.TrimSpace(s)
+	if strings.HasSuffix(t, "?") || strings.HasSuffix(t, "？") {
+		return true
+	}
+	for _, p := range []string{"嗎？", "嗎?", "是不是", "為什麼", "怎麼會"} {
+		if strings.Contains(t, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasFirstPerson reports a first-person stake — the asker talking about their
+// own plans or situation ("所以我們下個月到機場之後..." is a plan, not an inquiry).
+func hasFirstPerson(s string) bool {
+	if strings.Contains(s, "我") {
+		return true
+	}
+	lower := " " + strings.ToLower(s) + " "
+	for _, w := range []string{" i ", " my ", " we ", " our ", " i'm ", " i'll "} {
+		if strings.Contains(lower, w) {
+			return true
+		}
+	}
+	return false
+}

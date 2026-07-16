@@ -90,6 +90,10 @@ var coverageCorpus = []coverageCase{
 	{text: "看來我水煮蛋還是要煮熟一點，半熟的可能讓肚子不舒服", class: "zh-gotcha"},
 	{text: "原來西雅圖的輕軌上下車都要刷卡", class: "zh-gotcha"},
 	{text: "居然上下車都要tap信用卡，跟台北不一樣", class: "zh-gotcha"},
+	// A question that STATES the user's own plan must still capture — the
+	// interrogative guard only drops entity-only questions with no
+	// first-person stake.
+	{text: "所以我們下個月到機場之後，就直接搭Metro Line去飯店嗎?", class: "zh-plan-question"},
 }
 
 // chatterCorpus must produce ZERO candidates — the false-positive guard.
@@ -107,6 +111,13 @@ var chatterCorpus = []string{
 	"(sticker) [video sticker] [emoji: 😎, set: Capoo_Video2]",
 	"(photo)",
 	"(voice message) [duration: 12s]",
+	// Entity-bearing pure questions (4 live FPs): asking ABOUT something is
+	// not a fact about the asker. First-person plan-stating questions still
+	// capture (see zh-plan-question in the coverage corpus).
+	"所以P2P轉帳還是Venmo比較多人使用？",
+	"你們知道Paze嗎？是不是像Venmo？",
+	"為什麼換Nova不見了？",
+	"Why does the Rivelo EV make engine noise while charging?",
 }
 
 func TestEvalCaptureCoverage(t *testing.T) {
@@ -138,7 +149,7 @@ func TestEvalCaptureCoverage(t *testing.T) {
 
 	classes := []string{"preference", "correction", "decision", "boundary", "fact", "procedural",
 		"zh-preference", "zh-correction", "zh-decision", "zh-boundary", "zh-fact",
-		"zh-entity", "zh-multisent", "en-entity", "zh-health", "zh-gotcha"}
+		"zh-entity", "zh-multisent", "en-entity", "zh-health", "zh-gotcha", "zh-plan-question"}
 	t.Log("class          coverage  knownGaps")
 	totalHit, totalAll := 0, 0
 	for _, cl := range classes {
