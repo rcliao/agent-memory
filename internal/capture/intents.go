@@ -33,7 +33,7 @@ var intents = []intent{
 	{"decision", 0.22, regexp.MustCompile(`(?i)\b(we|i|let'?s)\s+(decided|chose|will use|are going to|should use|going with|settled on)\b|\blet'?s\s+(?:also\s+)?(?:go\s+with|store|start|keep|track|add|try|schedule)\b|\bthe plan is\b|\bdecision:\b|決定|就(?:選|用|訂)這|說好了`)},
 	// Health events: symptoms, injuries, remedies — the premium episodic
 	// class for a family agent (two live misses in two days before this cue).
-	{"health", 0.26, regexp.MustCompile(`(?i)(?:allergic|nauseous|dizzy|fever|headache|injured|bleeding|rash|threw up)|拉肚子|不舒服|受傷|切到|流血|發燒|頭痛|想吐|過敏|起疹|吃了.{0,6}(?:藥|止痛)|藥膏`)},
+	{"health", 0.26, regexp.MustCompile(`(?i)(?:allergic|nauseous|dizzy|fever|headache|injured|bleeding|rash|threw up)|拉肚子|不舒服|受傷|切到|流血|發燒|頭痛|想吐|過敏|起疹|紅疹|癢|吃了.{0,6}(?:藥|止痛)|藥膏|消了|痊癒|好多了|退燒`)},
 	// Standing instructions / boundaries: rules about future conduct.
 	{"boundary", 0.26, regexp.MustCompile(`(?i)\b(?:please\s+)?never\s+(?:share|send|post|tell|mention|give|use)\b|\bfrom\s+now\s+on\b|\bdon'?t\s+(?:send|share|text|message|call|post|tell|schedule|book)\b|\bmake\s+sure\s+(?:to|you|we)\b|\bbe\s+sure\s+to\b|以後|從現在開始|之後都|不要(?:再)?(?:傳|放|加|用|說|提)|別再|千萬不要|記得(?:要|以後)`)},
 	// Gotchas / confirmed learnings worth not re-discovering.
