@@ -116,8 +116,14 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 			if similar != "" {
 				// Triage REINFORCE: strengthen the existing memory instead of
 				// creating a sibling — being told twice is spaced rehearsal.
+				// Cosine is only the candidate-finder: embeddings score
+				// template scaffolding ("I always keep the X next to the Y")
+				// as similar across entirely different payloads — the embedded
+				// nurture kit caught template noise reinforce-merging its way
+				// into ltm, and day-stamped memo templates would merge too.
+				// The strict bidirectional term check confirms the match.
 				existing, err := s.Get(ctx, GetParams{NS: p.NS, Key: similar})
-				if err == nil && len(existing) > 0 {
+				if err == nil && len(existing) > 0 && paraphraseOf(p.Content, existing[0].Content) {
 					s.reinforce(ctx, existing[0].ID, importanceOrDefault(p.Importance))
 					return &existing[0], nil
 				}

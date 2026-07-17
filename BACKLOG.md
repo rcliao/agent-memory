@@ -66,7 +66,20 @@ queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency
    refused on locked keys — MCP-exposed ghost_curate could otherwise let an
    agent curate away its own charter. Evals: contract_test.go. FTS trigger
    migration shipped earlier (PR #38).
-5. **#7 vector-path flooding**: embedded flooding eval scenario first, then the
+5. **Embedded nurture variant — SHIPPED (2026-07-17)**: same kits under the
+   vector channel (GHOST_NURTURE_EMBED=1). Measured: (a) paraphrase recall
+   CLOSED — the fade-below-floor correction diagnostic was FTS-only; the
+   vector channel reaches "which spot are the roses in these days"; (b)
+   restated lessons aggregate (6/6 probes, siblings collapse, promotion via
+   reinforcement); (c) CAUGHT + FIXED a triage flaw: cosine alone reinforced
+   template noise across different payloads (scaffold similarity) — noise
+   earned ltm via 21 days of false rehearsal. Cosine is now only the
+   candidate-finder; the strict bidirectional term check (paraphraseOf)
+   confirms every reinforce — which also protects day-stamped memo templates
+   from merging under embeddings. Documented: consistently-repeated
+   same-subject statements DO promote (TESSERA — that is signal, not noise).
+6. **#7 vector-path flooding**: embedded flooding eval scenario next (extends
+   the embedded kit with novel-topic probes over noise pressure), then the
    query-relative/hybrid gate tuned against it. Confirmed on live traffic
    nightly; damage bounded (extra injected filler).
 6. **#4 compaction_suggested threshold** — cheap fix, kills the ~183/day reflect
