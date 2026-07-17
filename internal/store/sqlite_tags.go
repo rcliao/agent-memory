@@ -68,6 +68,14 @@ func (s *SQLiteStore) ListTags(ctx context.Context, ns string) ([]TagInfo, error
 
 // RenameTag renames a tag across all active memories, returning the count of affected memories.
 func (s *SQLiteStore) RenameTag(ctx context.Context, oldTag, newTag, ns string) (int, error) {
+	if s.contractReadOnly {
+		return 0, s.errContractNewer()
+	}
+	// The locked bit is the read-only guarantee itself — tag ops may not
+	// strip or rename it (the last remaining bypass; see locked.go).
+	if oldTag == LockedTag || newTag == LockedTag {
+		return 0, fmt.Errorf("the %q tag is the read-only bit and cannot be renamed or created via tag ops; use put --unlock on individual keys", LockedTag)
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	where := []string{
 		"deleted_at IS NULL",
@@ -150,6 +158,12 @@ func (s *SQLiteStore) RenameTag(ctx context.Context, oldTag, newTag, ns string) 
 
 // RemoveTag removes a tag from all active memories, returning the count of affected memories.
 func (s *SQLiteStore) RemoveTag(ctx context.Context, tag, ns string) (int, error) {
+	if s.contractReadOnly {
+		return 0, s.errContractNewer()
+	}
+	if tag == LockedTag {
+		return 0, fmt.Errorf("the %q tag is the read-only bit and cannot be bulk-removed; use put --unlock on individual keys", LockedTag)
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	where := []string{
 		"deleted_at IS NULL",
