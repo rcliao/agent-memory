@@ -85,6 +85,11 @@ var coverageCorpus = []coverageCase{
 	{text: "早餐後拉肚子，吃wakamoto", class: "zh-health"},
 	{text: "沒注意到我切到手指了，看起來是沒流血", class: "zh-health"},
 	{text: "今天頭痛了一整個下午，吃了半顆止痛藥", class: "zh-health"},
+	// Health RESOLUTION — the other end of the arc (live miss 2026-07-17:
+	// the morning's allergy-bump symptom captured, its recovery didn't,
+	// leaving the memory actively stale). Cases synthetic per no-life-data.
+	{text: "手臂上的紅疹癢癢消了，不腫了", class: "zh-health"},
+	{text: "喉嚨痛好多了，昨天的藥有效", class: "zh-health"},
 	// Chinese turns-out/conclusion markers — three live misses (Koda sensor
 	// diagnosis, transit tap-card discovery, cook-eggs-longer lesson).
 	{text: "看來我水煮蛋還是要煮熟一點，半熟的可能讓肚子不舒服", class: "zh-gotcha"},
@@ -103,6 +108,7 @@ var chatterCorpus = []string{
 	"lol that's amazing",
 	"good morning! how are you today?",
 	"好喔",
+	"沒關係，先這樣好了",
 	"哈哈真的假的",
 	"okay okay I'm heading out now, talk later!",
 	// Bridge-generated media placeholders are metadata, not user prose —
