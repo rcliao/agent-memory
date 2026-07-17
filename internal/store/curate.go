@@ -64,6 +64,17 @@ func (s *SQLiteStore) Curate(ctx context.Context, p CurateParams) (*CurateResult
 	}
 	m := mems[0]
 
+	// The locked bit means change-only-by-deliberate-write: destructive
+	// curation (delete/demote/archive/diminish/unpin) is refused so an agent
+	// cannot curate away its own charter (MCP exposes ghost_curate). Unlock
+	// the key first (put --unlock) if the owner truly intends it.
+	if hasLockedTag(m.Tags) {
+		switch p.Op {
+		case "delete", "demote", "archive", "diminish", "unpin":
+			return nil, fmt.Errorf("key %q is locked; %s refused — remove the lock deliberately first (put --unlock)", p.Key, p.Op)
+		}
+	}
+
 	result := &CurateResult{NS: p.NS, Key: p.Key, Op: p.Op}
 
 	switch p.Op {

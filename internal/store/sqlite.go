@@ -28,6 +28,9 @@ type SQLiteStore struct {
 	db       *sql.DB
 	entropy  *rand.Rand
 	embedder embedding.Embedder
+	// contractReadOnly: the DB was written under a NEWER store contract than
+	// this binary supports — writes are refused (see contract.go).
+	contractReadOnly bool
 	reranker embedding.Reranker
 	nowFn    func() time.Time // injectable clock; nil means time.Now
 }
@@ -74,6 +77,10 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+
+	// Contract handshake: stamp fresh/older DBs; refuse writes when the DB
+	// is newer than this binary (see contract.go).
+	s.checkContract()
 
 	// Auto-GC: delete expired memories on startup. Failures must be visible —
 	// a swallowed FK error here once left months of expired memories in place.

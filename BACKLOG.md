@@ -58,12 +58,14 @@ queries, (d) novel-topic chatter over-injecting filler, (e) bounded turn latency
      stability over time as the promotion-proposal signal (TESSERA); (d) shell
      consolidation contract — digests born with `contains` edges; (e) dedup
      churn skip; (f) ACT-R re-match on matured logs.
-4. **Store-integrity asks from shell wiring (2026-07-14)**: (a) **version
-   handshake** — a stale ghost binary bypassed lock enforcement (library-level)
-   against a newer-contract DB; store a contract version (user_version), old
-   binaries refuse writes when DB is newer. (b) **Gate RemoveTag/RenameTag** on
-   `locked` (tag removal currently un-gated — the one bypass left). (c) FTS
-   trigger migration SHIPPED (see below).
+4. **Store integrity — SHIPPED (2026-07-17)**: (a) version handshake —
+   PRAGMA user_version contract stamp (v1 = protected-memory contract);
+   binaries older than the DB's contract refuse writes, reads stay allowed
+   (contract.go); (b) RemoveTag/RenameTag refuse to strip/rename the `locked`
+   tag; (c) Curate destructive ops (delete/demote/archive/diminish/unpin)
+   refused on locked keys — MCP-exposed ghost_curate could otherwise let an
+   agent curate away its own charter. Evals: contract_test.go. FTS trigger
+   migration shipped earlier (PR #38).
 5. **#7 vector-path flooding**: embedded flooding eval scenario first, then the
    query-relative/hybrid gate tuned against it. Confirmed on live traffic
    nightly; damage bounded (extra injected filler).

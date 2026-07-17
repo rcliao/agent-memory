@@ -16,6 +16,9 @@ import (
 )
 
 func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, error) {
+	if s.contractReadOnly {
+		return nil, s.errContractNewer()
+	}
 	if err := ValidateNS(p.NS); err != nil {
 		return nil, fmt.Errorf("invalid namespace: %w", err)
 	}
