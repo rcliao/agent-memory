@@ -166,19 +166,34 @@ func Extract(text string, opts Options) []Candidate {
 // multiple candidates.
 func segment(text string, speakerFilter string) []string {
 	var segs []string
+	prevKept := false
 	for _, rawLine := range strings.Split(text, "\n") {
 		line := strings.TrimSpace(rawLine)
 		if line == "" {
+			prevKept = false
 			continue
 		}
 
 		speaker, body := splitSpeaker(line)
 		if speakerFilter != "" && speaker != "" && strings.ToLower(speaker) != speakerFilter {
+			prevKept = false
 			continue
 		}
 		if body == "" {
 			body = line
 		}
+
+		// A bare-URL line is a referent for the sentence above it, not a
+		// sentence of its own ("不對喔，我們的是這個" + link — the deictic
+		// correction is content-free without the URL). Attach it to the
+		// previous segment when that segment came from the same kept speaker.
+		if bareURLRe.MatchString(body) {
+			if prevKept && len(segs) > 0 {
+				segs[len(segs)-1] += " " + body
+			}
+			continue
+		}
+		prevKept = true
 
 		for _, sent := range splitSentences(body) {
 			sent = strings.TrimSpace(sent)
@@ -265,6 +280,9 @@ func containsCJKRune(s string) bool {
 
 // mediaPlaceholderRe matches transport-layer media placeholder segments.
 var mediaPlaceholderRe = regexp.MustCompile(`^\((?:sticker|photo|video|voice(?:\s+message)?|file|document|audio)\)`)
+
+// bareURLRe matches a line that is nothing but a single URL.
+var bareURLRe = regexp.MustCompile(`^https?://\S+$`)
 
 // isPureQuestion reports whether the segment reads as an interrogative:
 // question-mark terminated, or carrying CJK question particles.

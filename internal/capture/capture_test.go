@@ -160,3 +160,37 @@ func TestKeysUniqueWithinBatch(t *testing.T) {
 		seen[c.Key] = true
 	}
 }
+
+// Live miss (2026-07-17): "不對喔Umbreon，我們的是這個" + a product URL on the
+// next line distilled as a content-free deictic correction — the URL segment
+// split off and dropped, leaving a memory with no referent. A bare-URL line
+// is a referent, not a sentence: it must ride with the preceding segment.
+func TestURLLineAttachesToPrecedingSegment(t *testing.T) {
+	text := "User: 不對喔，我們的是這個\nhttps://shop.example.com/product/98765432"
+	cands := Extract(text, Options{SpeakerFilter: "user"})
+	c := findByCue(cands, "correction")
+	if c == nil {
+		t.Fatalf("correction not captured; got %+v", cands)
+	}
+	if !strings.Contains(c.Content, "98765432") {
+		t.Errorf("deictic correction lost its URL referent: %q", c.Content)
+	}
+	// The URL must not also surface as its own contentless candidate.
+	for _, x := range cands {
+		if strings.TrimSpace(x.Content) == "https://shop.example.com/product/98765432" {
+			t.Errorf("bare URL captured as standalone candidate")
+		}
+	}
+}
+
+// A URL after a filtered-out speaker's line must not attach to an earlier
+// segment from a different speaker.
+func TestURLAfterFilteredSpeakerDropped(t *testing.T) {
+	text := "User: 我比較喜歡走樓梯\nAssistant: 這款如何\nhttps://shop.example.com/product/11112222"
+	cands := Extract(text, Options{SpeakerFilter: "user"})
+	for _, c := range cands {
+		if strings.Contains(c.Content, "11112222") {
+			t.Errorf("URL from filtered speaker context leaked into %q", c.Content)
+		}
+	}
+}
