@@ -103,6 +103,11 @@ type ContextResult struct {
 type contextCandidate struct {
 	memory model.Memory
 	score  float64
+	// relevance is the topical-match strength that fed the composite score: a
+	// real cosine for vector-sourced candidates, a graded term overlap for
+	// FTS/LIKE ones, 0 for edge-expanded arrivals. Kept so the MinScore floor
+	// can distinguish "weak match" from "strong match sunk by recency".
+	relevance float64
 }
 
 // Context assembles relevant memories within a token budget.
@@ -246,7 +251,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		if w, isParent := summaryWeightFor(m.ID); isParent {
 			score *= w
 		}
-		scoreMap[m.ID] = &contextCandidate{memory: m, score: score}
+		scoreMap[m.ID] = &contextCandidate{memory: m, score: score, relevance: sim}
 	}
 
 	// Phase 3: Edge expansion — spreading activation
@@ -305,9 +310,27 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	}
 	if len(candidates) > 0 && (p.MinScore > 0 || p.MinSpread > 0) {
 		if p.MinScore > 0 {
+			// Relevance-confident rescue (query-relative): the floor exists to
+			// kill topically-unmatched filler that rides recency over it; it
+			// must not blank a strong topical match whose composite sank only
+			// because the memory is old (measured: a once-stated fact at
+			// cosine 0.38 vs a 0.04 noise floor scored 0.21 composite at two
+			// weeks old — the assembled context came back EMPTY). A candidate
+			// with real topical confidence (relevance ≥ 0.35, i.e. genuine
+			// cosine territory) that is also dominant among this query's
+			// candidates (≥ 0.8× the best relevance seen) survives the floor.
+			// Flood noise cannot ride the exemption: dominance is relative,
+			// and near-duplicate template noise sits far below the top hit.
+			maxRel := 0.0
+			for _, c := range candidates {
+				if c.relevance > maxRel {
+					maxRel = c.relevance
+				}
+			}
 			keep := candidates[:0]
 			for _, c := range candidates {
-				if c.score >= p.MinScore {
+				if c.score >= p.MinScore ||
+					(c.relevance >= 0.35 && c.relevance >= 0.8*maxRel) {
 					keep = append(keep, c)
 				}
 			}

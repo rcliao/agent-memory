@@ -144,6 +144,42 @@ func DefaultNurtureKit() NurtureKit {
 	}
 }
 
+// FloodingNurtureKit is the vector-flooding stress: weeks of template-phrased
+// noise that capture STORES (every noise turn is intent-phrased), all sharing
+// one scaffold so their embeddings cluster tightly — then a single novel fact
+// stated exactly once, probed later ONLY in paraphrase (minimal shared terms,
+// so FTS contributes little and the vector channel must dig the fact out from
+// under the flood). The measurable claims:
+//
+//   - once-stated novel facts stay reachable by meaning under noise pressure
+//   - the assembled probe context is not majority-noise (flood share bounded)
+//
+// This is the red harness for the #7 flooding gate: if generic high-cosine
+// noise outranks the target, probes miss and flood share spikes.
+func FloodingNurtureKit() NurtureKit {
+	kit := NurtureKit{
+		NS:               "agent:nurture-flooding",
+		FinalDay:         35,
+		NoisePerDay:      8,
+		NoiseIntentEvery: 1,
+	}
+	kit.Onboarding = DefaultNurtureKit().Onboarding
+	kit.Days = []NurtureDay{
+		{Day: 20, Exchanges: []NurtureExchange{
+			{Text: "We decided the spare house key now lives inside the blue ceramic frog beside the front door.", Salient: true},
+		}},
+		{Day: 26, Probes: []NurtureProbe{
+			{Query: "which hiding spot has our extra key if we get locked out", Repeats: 3,
+				WantContent: []string{"ceramic frog"}},
+		}},
+		{Day: 33, Probes: []NurtureProbe{
+			{Query: "where can someone find the backup way into the home", Repeats: 3,
+				WantContent: []string{"ceramic frog"}},
+		}},
+	}
+	return kit
+}
+
 // ParentingNurtureKit is the second-stage upbringing: the parent actively
 // SHAPES the agent — repeated corrections that should become conduct,
 // repeated encouragement that should become personality, and a one-off
