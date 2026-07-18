@@ -69,6 +69,54 @@ func TestEvalNurtureEmbeddedAggregation(t *testing.T) {
 	}
 }
 
+// TestEvalNurtureEmbeddedLLMRestatement documents the live sibling-
+// proliferation gap (2026-07-18): the distillation tier rewrites the SAME
+// lesson in fresh LLM wording each heartbeat, and one day of traffic produced
+// three sibling copies of one conduct rule. RATCHET, not aspiration — the
+// measured geometry makes the obvious fixes unsafe:
+//
+//	restatement pairs (must merge):        cosine 0.72–0.75
+//	correction vs stale fact (must NOT):   cosine 0.83
+//	same template, different day:          cosine 0.98
+//
+// The must-merge zone sits BELOW the must-not-merge zone, so no cosine
+// threshold separates them (a high-cosine fast path would merge corrections
+// into the facts they refute — the worst failure available). Aggregating
+// these needs a polarity-aware design, likely offline in reflect where
+// both contents can be compared with full context. Until then this test
+// pins the current behavior: 3 restatements → 3 siblings, no reinforcement.
+// If a triage change starts merging them, this trips — flip it into the
+// aspirational assertions (live==1, maxAccess>=2) deliberately.
+func TestEvalNurtureEmbeddedLLMRestatement(t *testing.T) {
+	s := newEmbeddedNurtureStore(t)
+	ctx := context.Background()
+	ns := "agent:nurture-restate"
+	// Three LLM-style rewrites of one rule — synthetic mirror of the live
+	// triple (invented-idiom diary rule, reworded per heartbeat).
+	restatements := []struct{ key, content string }{
+		{"behavioral-avoid-invented-idioms",
+			"Avoid inventing non-standard idiom phrasing in diary entries (e.g. reduplicating a brand name as a verb) — the reader gets confused and asks what it means."},
+		{"behavioral-diary-no-invented-idioms",
+			"Do not use invented or non-standard idioms and metaphors in diary entries — the reader will ask what they mean if the phrasing is coined."},
+		{"diary-language-standard-only",
+			"Diary language rule: stick to standard phrasing only; coined or invented expressions in diary entries confuse the reader and need follow-up explanation."},
+	}
+	for _, r := range restatements {
+		if _, err := s.Put(ctx, PutParams{NS: ns, Key: r.key, Content: r.content,
+			Kind: "semantic", Tier: "stm", Importance: 0.6, Dedup: true}); err != nil {
+			t.Fatalf("put %s: %v", r.key, err)
+		}
+	}
+	var live int
+	s.db.QueryRow(`SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL AND ns = ?`, ns).Scan(&live)
+	var maxAccess int
+	s.db.QueryRow(`SELECT COALESCE(MAX(access_count),0) FROM memories WHERE deleted_at IS NULL AND ns = ?`, ns).Scan(&maxAccess)
+	t.Logf("restatement aggregation: live=%d maxAccess=%d", live, maxAccess)
+	if live != 3 {
+		t.Errorf("ratchet: expected the documented 3-sibling gap, got live=%d — triage behavior changed; re-measure and flip this test to the aspirational assertions", live)
+	}
+}
+
 func TestEvalNurtureEmbeddedFlooding(t *testing.T) {
 	s := newEmbeddedNurtureStore(t)
 	kit := FloodingNurtureKit()
