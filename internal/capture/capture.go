@@ -97,14 +97,23 @@ func Extract(text string, opts Options) []Candidate {
 		}
 
 		cues := classify(trimmed)
+		// Bullet-line fragments ("-One Mighty的吐司+spread") are pieces of a
+		// structured message, not standalone facts — without an intent cue
+		// the line rides on its parent memo (live FP 2026-07-18).
+		if len(cues) == 0 && bulletLineRe.MatchString(trimmed) {
+			continue
+		}
 		// Entity extraction tokenizes on spaces, so Latin names embedded in a
 		// CJK run ("看了Milo的燈") are invisible without padding the script
 		// boundaries first. Stored content stays original.
 		ents := entity.Extract(padScriptBoundaries(trimmed))
 
 		// A segment is worth remembering only if it carries an intent cue or a
-		// named entity. Pure chatter ("haha ok thanks") has neither and is dropped.
-		if len(cues) == 0 && len(ents) == 0 {
+		// named entity. Pure chatter ("haha ok thanks") has neither and is
+		// dropped. A name in VOCATIVE position ("週末我不想那麼早起欸Nova",
+		// "Nova 我回來囉") is the addressee, not subject matter — it cannot be
+		// the entity that qualifies the segment (2 live FPs 2026-07-18).
+		if len(cues) == 0 && countNonVocative(trimmed, ents) == 0 {
 			continue
 		}
 		// Entity-only pure questions are inquiries ABOUT the world, not facts
@@ -283,6 +292,50 @@ var mediaPlaceholderRe = regexp.MustCompile(`^\((?:sticker|photo|video|voice(?:\
 
 // bareURLRe matches a line that is nothing but a single URL.
 var bareURLRe = regexp.MustCompile(`^https?://\S+$`)
+
+// bulletLineRe matches memo-style list-item lines.
+var bulletLineRe = regexp.MustCompile(`^[-–•▫️*]\s*\S`)
+
+// countNonVocative returns how many entities are NOT in vocative position:
+// at the segment end right after a CJK vocative particle, or leading the
+// segment as a standalone address followed by CJK text (or a comma).
+func countNonVocative(seg string, ents []entity.Entity) int {
+	n := 0
+	for _, e := range ents {
+		if !isVocative(seg, e.Text) {
+			n++
+		}
+	}
+	return n
+}
+
+func isVocative(seg, name string) bool {
+	if name == "" {
+		return false
+	}
+	// Entity texts arrive lowercased; compare case-insensitively.
+	low, lname := strings.ToLower(seg), strings.ToLower(name)
+	// Trailing "…欸Nova" / "…啊Nova": name ends the segment and the rune
+	// before it is a vocative particle.
+	if strings.HasSuffix(low, lname) {
+		head := []rune(seg[:len(seg)-len(name)])
+		if len(head) > 0 {
+			switch head[len(head)-1] {
+			case '欸', '啊', '喔', '呀', '嘛', '，', ' ':
+				return true
+			}
+		}
+	}
+	// Leading "Nova 我回來囉" / "Nova，…": standalone address followed by
+	// CJK prose (English "Nova's…" or "Nova make sure…" stays a subject).
+	if strings.HasPrefix(low, lname) {
+		rest := []rune(seg[len(name):])
+		if len(rest) >= 2 && (rest[0] == '，' || rest[0] == ',' || rest[0] == ' ') && containsCJKRune(string(rest[1:2])) {
+			return true
+		}
+	}
+	return false
+}
 
 // isPureQuestion reports whether the segment reads as an interrogative:
 // question-mark terminated, or carrying CJK question particles.

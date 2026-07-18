@@ -124,6 +124,16 @@ var chatterCorpus = []string{
 	"你們知道Paze嗎？是不是像Venmo？",
 	"為什麼換Nova不見了？",
 	"Why does the Rivelo EV make engine noise while charging?",
+	// Vocative agent-name chatter (2 live FPs, 2026-07-18): the addressed
+	// name is the segment's only entity — transient remarks aimed AT an
+	// agent are not facts about the speaker's world.
+	"週末我不想那麼早起欸Nova",
+	"Nova 我回來囉，等等再聊",
+	// Bullet-line fragments (live FP 2026-07-18): memo list items are
+	// pieces of a structured message, not standalone facts — the memo
+	// itself is handled by the memo skill, and the line has no cue.
+	"-Sunrise Bakery的全麥吐司+花生醬",
+	"- 一顆水煮蛋",
 }
 
 func TestEvalCaptureCoverage(t *testing.T) {
