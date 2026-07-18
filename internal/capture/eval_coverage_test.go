@@ -57,44 +57,44 @@ var coverageCorpus = []coverageCase{
 	{text: "我比較喜歡短一點的回覆，不要長篇大論。", class: "zh-preference"},
 	{text: "以後我丟網址給你，就直接用瀏覽器工具開來看。", class: "zh-boundary"},
 	{text: "不對，我說的是週三不是週二。", class: "zh-correction"},
-	{text: "我對香茅過敏，煮菜的時候不要放。", class: "zh-fact"},
-	{text: "我們決定八月三號去西雅圖玩。", class: "zh-decision"},
+	{text: "我對芹菜過敏，煮菜的時候不要放。", class: "zh-fact"},
+	{text: "我們決定十月五號去波特蘭玩。", class: "zh-decision"},
 	{text: "記得以後早上七點提醒我幫玫瑰澆水。", class: "zh-boundary"},
 	// Entity embedded in a CJK run (no spaces) — found live 2026-07-14: the
-	// Koda troubleshooting turn distilled nothing because "Koda" inside
-	// 看了Koda的燈 never became a token.
-	{text: "剛剛看了Koda的燈又在閃爍，看起來像是感應器的問題。", class: "zh-entity"},
+	// device-name troubleshooting turn distilled nothing because the Latin
+	// name inside 看了Milo的燈 never became a token.
+	{text: "剛剛看了Milo的燈又在閃爍，看起來像是感應器的問題。", class: "zh-entity"},
 	// Multi-sentence CJK: 。-separated sentences must be split so each is
 	// classified on its own (unsplit blobs truncate at 400 bytes).
-	{text: "我們決定八月三號出發。我比較喜歡早上的班機。", class: "zh-multisent"},
+	{text: "我們決定十月五號出發。我比較喜歡下午的班機。", class: "zh-multisent"},
 	// Sentence-initial English entity is discounted by the NER heuristic —
 	// documented gap (entity package change, not capture).
-	{text: "Koda's light flickered again around six this evening.", class: "en-entity", gap: true},
-	// Live-found 2026-07-14 (papi's research directive distilled nothing):
+	{text: "Milo's light flickered again around six this evening.", class: "en-entity", gap: true},
+	// Live-found 2026-07-14 (a standing research directive distilled nothing):
 	// "make sure to" standing instructions and "let's also <verb>" decisions.
-	{text: "Pika make sure to update our daily research with more papers about agent memory.", class: "boundary"},
-	{text: "Better yet let's also store the research findings into our memories.", class: "decision"},
+	{text: "Nova make sure to update our weekly reading list with more papers about sleep science.", class: "boundary"},
+	{text: "Better yet let's also store the reading notes into our memories.", class: "decision"},
 	// Live-found 2026-07-14 evening: dense short Chinese facts — "we don't
-	// drink alcohol" is 18 bytes, under the English-tuned 20-byte segment
+	// eat beef" is 18 bytes, under the English-tuned 20-byte segment
 	// floor, and negated habits (我們不+verb) had no cue.
-	{text: "我們不喝酒喔", class: "zh-fact"},
-	{text: "我不吃辣，拜託記得。", class: "zh-preference"},
-	// Health events — two live misses in two days (finger cut while cooking
-	// 2026-07-14; post-breakfast upset + Wakamoto 2026-07-15). The premium
+	{text: "我們不吃牛喔", class: "zh-fact"},
+	{text: "我不吃香菜，拜託記得。", class: "zh-preference"},
+	// Health events — two live misses in two days (2026-07-14/15; a minor
+	// kitchen cut, a post-meal upset treated with a named remedy). The premium
 	// memory class for this household.
-	{text: "早餐後拉肚子，吃wakamoto", class: "zh-health"},
-	{text: "沒注意到我切到手指了，看起來是沒流血", class: "zh-health"},
-	{text: "今天頭痛了一整個下午，吃了半顆止痛藥", class: "zh-health"},
+	{text: "午餐後拉肚子，吃bifidin", class: "zh-health"},
+	{text: "切菜的時候切到指甲，還好是沒流血", class: "zh-health"},
+	{text: "今天頭痛了一整個晚上，吃了一顆止痛藥", class: "zh-health"},
 	// Health RESOLUTION — the other end of the arc (live miss 2026-07-17:
 	// the morning's allergy-bump symptom captured, its recovery didn't,
 	// leaving the memory actively stale). Cases synthetic per no-life-data.
 	{text: "手臂上的紅疹癢癢消了，不腫了", class: "zh-health"},
 	{text: "喉嚨痛好多了，昨天的藥有效", class: "zh-health"},
-	// Chinese turns-out/conclusion markers — three live misses (Koda sensor
-	// diagnosis, transit tap-card discovery, cook-eggs-longer lesson).
-	{text: "看來我水煮蛋還是要煮熟一點，半熟的可能讓肚子不舒服", class: "zh-gotcha"},
-	{text: "原來西雅圖的輕軌上下車都要刷卡", class: "zh-gotcha"},
-	{text: "居然上下車都要tap信用卡，跟台北不一樣", class: "zh-gotcha"},
+	// Chinese turns-out/conclusion markers — three live misses (a sensor
+	// diagnosis, a transit fare discovery, an undercooking lesson).
+	{text: "看來蛤蜊還是要煮熟一點，半生的可能讓肚子不舒服", class: "zh-gotcha"},
+	{text: "原來波特蘭的輕軌上下車都要刷卡", class: "zh-gotcha"},
+	{text: "居然上下車都要tap信用卡，跟東京不一樣", class: "zh-gotcha"},
 	// A question that STATES the user's own plan must still capture — the
 	// interrogative guard only drops entity-only questions with no
 	// first-person stake.

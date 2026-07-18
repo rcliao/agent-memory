@@ -127,7 +127,7 @@ All green on the current stack — and the first run already caught two things:
   the correction inherits the stale fact's importance before demoting it, so
   an unrehearsed correction can't rank below the rehearsed fact it replaces.
   TestEvalNurtureSupersedeFired flipped from logged diagnostic to assertion;
-  TestEvalSupersedeCJKCorrection encodes the real raspberry/cranberry case.
+  TestEvalSupersedeCJKCorrection encodes a live food-memo correction (content synthesized).
 - **Unrehearsed corrections fade below the score floor within ~4 weeks** on
   the FTS-only path (paraphrase queries can't reach them; term queries can).
   The embedded/reranked variant of this kit (GHOST_PERSONAL_EMBED pattern)

@@ -84,7 +84,7 @@ var behaviorSituations = []struct {
 	ruleName string
 	userMsg  string
 }{
-	{"short-answers", "可以介紹一下西雅圖有什麼好玩的地方嗎？"},
+	{"short-answers", "可以介紹一下京都有什麼好玩的地方嗎？"},
 	{"short-answers", "Tell me about good breakfast options for busy mornings."},
 	{"include-price", "推薦一個好用的保溫杯給我"},
 	{"include-price", "Can you recommend a good electric kettle?"},

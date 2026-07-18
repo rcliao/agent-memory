@@ -82,7 +82,7 @@ func Extract(text string, opts Options) []Candidate {
 		if mediaPlaceholderRe.MatchString(trimmed) {
 			continue
 		}
-		// CJK packs far more meaning per byte ("我們不喝酒" is a durable
+		// CJK packs far more meaning per byte ("我們不吃牛" is a durable
 		// family fact in 15 bytes), so CJK-bearing segments get a lower
 		// floor; the cue/entity gate still drops short chatter.
 		floor := minSegmentLen
@@ -98,7 +98,7 @@ func Extract(text string, opts Options) []Candidate {
 
 		cues := classify(trimmed)
 		// Entity extraction tokenizes on spaces, so Latin names embedded in a
-		// CJK run ("看了Koda的燈") are invisible without padding the script
+		// CJK run ("看了Milo的燈") are invisible without padding the script
 		// boundaries first. Stored content stays original.
 		ents := entity.Extract(padScriptBoundaries(trimmed))
 
@@ -245,7 +245,7 @@ func normalizeContent(s string) string {
 
 // padScriptBoundaries inserts spaces where Latin/digit runs abut CJK runs so
 // space-tokenized consumers (entity extraction) see embedded names like
-// "Koda" in 看了Koda的燈 as their own tokens.
+// "Milo" in 看了Milo的燈 as their own tokens.
 func padScriptBoundaries(s string) string {
 	isCJK := func(r rune) bool {
 		return (r >= 0x4E00 && r <= 0x9FFF) || (r >= 0x3400 && r <= 0x4DBF) ||

@@ -79,8 +79,9 @@ func TestEvalWriteTriageReinforce(t *testing.T) {
 	}
 }
 
-// The CORRECT disposition, on the real live case (2026-07-14): mami corrected
-// her food records — 其實是吃了覆盆子而不是蔓越莓 — and the correction
+// The CORRECT disposition, modeled on a live correction (2026-07-14, content
+// synthesized): the user corrected
+// her food records — 其實是吃了黑莓而不是藍莓 — and the correction
 // distilled, but supersede never fired: the change-cue regex was English-only
 // and the matcher required shared NAMED entities. The correction must
 // (a) create a contradicts edge to the stale fact, (b) diminish the stale
@@ -91,11 +92,11 @@ func TestEvalSupersedeCJKCorrection(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := s.Put(ctx, PutParams{NS: "agent:t", Key: "breakfast-berries",
-		Content: "早餐吃了蔓越莓和優格，配全麥吐司", Kind: "episodic", Tier: "stm", Importance: 0.8}); err != nil {
+		Content: "早餐吃了藍莓和優格，配全麥吐司", Kind: "episodic", Tier: "stm", Importance: 0.8}); err != nil {
 		t.Fatalf("put stale: %v", err)
 	}
 	corr, err := s.Put(ctx, PutParams{NS: "agent:t", Key: "correction-berries",
-		Content: "其實是吃了覆盆子而不是蔓越莓，水果memo記錯了", Kind: "semantic", Tier: "stm", Importance: 0.5})
+		Content: "其實是吃了黑莓而不是藍莓，水果memo記錯了", Kind: "semantic", Tier: "stm", Importance: 0.5})
 	if err != nil {
 		t.Fatalf("put correction: %v", err)
 	}
