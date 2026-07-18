@@ -69,6 +69,46 @@ func TestEvalNurtureEmbeddedAggregation(t *testing.T) {
 	}
 }
 
+func TestEvalNurtureEmbeddedFlooding(t *testing.T) {
+	s := newEmbeddedNurtureStore(t)
+	kit := FloodingNurtureKit()
+	rep := growNurture(t, s, kit, nurtureConditions{Reflect: true, Distill: true})
+	t.Logf("embedded flooding: probes %d/%d live=%d noiseLive=%d contamination=%d",
+		rep.ProbeHits, rep.ProbeTotal, rep.LiveTotal, rep.NoiseLive, rep.ProbeContamination)
+
+	// The flooding claim: a once-stated novel fact stays reachable by meaning
+	// even when the namespace is saturated with stored template noise.
+	var factTier, factKind string
+	var factAccess int
+	s.db.QueryRow(`SELECT tier, kind, access_count FROM memories WHERE deleted_at IS NULL AND ns = ?
+		AND key NOT LIKE 'exchange-%' AND content LIKE '%ceramic frog%' LIMIT 1`, kit.NS).Scan(&factTier, &factKind, &factAccess)
+	t.Logf("fact standing: tier=%q kind=%q access=%d", factTier, factKind, factAccess)
+	if len(rep.ProbeMisses) > 0 {
+		t.Errorf("flooded out — paraphrase probes missed the once-stated fact:\n%s",
+			strings.Join(rep.ProbeMisses, "\n"))
+	}
+
+	// Flood share: assemble the day-33 probe context once more and measure how
+	// much of it is noise. A gate that merely includes the fact but buries it
+	// under near-duplicate noise still fails the reader.
+	ctx := context.Background()
+	res, err := s.Context(ctx, ContextParams{NS: kit.NS,
+		Query: "where can someone find the backup way into the home",
+		Budget: 2000, MinScore: 0.3, ExcludePinned: true})
+	if err != nil {
+		t.Fatalf("context: %v", err)
+	}
+	noise := 0
+	for _, m := range res.Memories {
+		if isNurtureNoise(m.Content) {
+			noise++
+		}
+	}
+	if len(res.Memories) > 0 && noise*2 > len(res.Memories) {
+		t.Errorf("probe context is majority noise: %d/%d memories are flood", noise, len(res.Memories))
+	}
+}
+
 func TestEvalNurtureEmbeddedParaphraseRecall(t *testing.T) {
 	s := newEmbeddedNurtureStore(t)
 	kit := DefaultNurtureKit()
