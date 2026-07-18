@@ -70,6 +70,14 @@ func Extract(text string, opts Options) []Candidate {
 	}
 	filter := strings.ToLower(strings.TrimSpace(opts.SpeakerFilter))
 
+	// A2A relay wrapper: a fellow agent's group message forwarded into this
+	// agent's turn. The inner speech belongs to the PEER, not the user —
+	// distilling it stores wrong-provenance facts (2 live FPs 2026-07-18).
+	// Transport metadata, same class as media placeholders.
+	if a2aRelayRe.MatchString(text) {
+		return nil
+	}
+
 	var out []Candidate
 	seenKeys := map[string]int{}
 	seenContent := map[string]bool{}
@@ -292,6 +300,10 @@ var mediaPlaceholderRe = regexp.MustCompile(`^\((?:sticker|photo|video|voice(?:\
 
 // bareURLRe matches a line that is nothing but a single URL.
 var bareURLRe = regexp.MustCompile(`^https?://\S+$`)
+
+// a2aRelayRe matches the bridge's fellow-agent relay preamble at the start
+// of a turn (optionally after a "User: " speaker prefix).
+var a2aRelayRe = regexp.MustCompile(`^(?:\w+:\s*)?\[\S+ \(your fellow agent\) said this in the group`)
 
 // bulletLineRe matches memo-style list-item lines.
 var bulletLineRe = regexp.MustCompile(`^[-–•▫️*]\s*\S`)
