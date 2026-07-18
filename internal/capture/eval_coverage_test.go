@@ -134,6 +134,9 @@ var chatterCorpus = []string{
 	// itself is handled by the memo skill, and the line has no cue.
 	"-Sunrise Bakery的全麥吐司+花生醬",
 	"- 一顆水煮蛋",
+	// Device-control tokens (2 live FPs, 2026-07-18): all-caps UI labels
+	// (ON/OFF) qualified a transient troubleshooting step as entity-bearing.
+	"我們剛剛就是從原本的ON 調到OFF，再調回ON都沒亮",
 	// A2A relay wrapper (2 live FPs, 2026-07-18): a fellow agent's group
 	// message relayed into this agent's turn — the inner speech belongs to
 	// the peer, not the user; distilling it stores wrong-provenance facts.

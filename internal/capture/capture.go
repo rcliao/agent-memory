@@ -265,8 +265,12 @@ func normalizeContent(s string) string {
 // "Milo" in 看了Milo的燈 as their own tokens.
 func padScriptBoundaries(s string) string {
 	isCJK := func(r rune) bool {
+		// Includes CJK punctuation (、。「」…) and fullwidth forms (，！？) —
+		// without them "OFF，再調回" tokenizes as one blob and the UI label
+		// leaks through as an entity (live FP 2026-07-18).
 		return (r >= 0x4E00 && r <= 0x9FFF) || (r >= 0x3400 && r <= 0x4DBF) ||
-			(r >= 0x3040 && r <= 0x30FF) || (r >= 0xF900 && r <= 0xFAFF)
+			(r >= 0x3040 && r <= 0x30FF) || (r >= 0xF900 && r <= 0xFAFF) ||
+			(r >= 0x3000 && r <= 0x303F) || (r >= 0xFF00 && r <= 0xFFEF)
 	}
 	isLatin := func(r rune) bool {
 		return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
@@ -314,11 +318,34 @@ var bulletLineRe = regexp.MustCompile(`^[-–•▫️*]\s*\S`)
 func countNonVocative(seg string, ents []entity.Entity) int {
 	n := 0
 	for _, e := range ents {
-		if !isVocative(seg, e.Text) {
-			n++
+		if isVocative(seg, e.Text) {
+			continue
 		}
+		// Short all-caps tokens (ON, OFF, PC, UV) are UI labels and unit
+		// abbreviations, not named entities — they must not qualify a
+		// cue-less segment (live FPs: ON/OFF troubleshooting steps).
+		if isShortCapsToken(e.Text) {
+			continue
+		}
+		n++
 	}
 	return n
+}
+
+func isShortCapsToken(s string) bool {
+	if len(s) > 3 {
+		return false
+	}
+	for _, r := range s {
+		if r < 'A' || r > 'Z' {
+			// entity texts arrive lowercased; accept a-z as "caps" only by
+			// length — a 2-3 letter bare token carries no identity either way
+			if r < 'a' || r > 'z' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func isVocative(seg, name string) bool {
