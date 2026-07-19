@@ -134,6 +134,12 @@ var chatterCorpus = []string{
 	// itself is handled by the memo skill, and the line has no cue.
 	"-Sunrise Bakery的全麥吐司+花生醬",
 	"- 一顆水煮蛋",
+	// Task-request questions (2 live FPs, 2026-07-19): "幫我找找…嗎" is a
+	// command the agent executes, not a fact about the asker — and the
+	// trailing 嗎 often arrives without ？, dodging the suffix check. The
+	// first-person exception (幫"我") must not rescue commands.
+	"可以幫我找找Solaris牌有沒有20cm左右的不鏽鋼平底鍋嗎",
+	"幫我查一下Northwind簽證要準備哪些文件",
 	// Question + link (2 live FPs, 2026-07-19): percent-encoded URLs fire
 	// the numeric fact cue (%E4… matches digit+%), and URL innards mint
 	// entities — cue and entity gates must grade the PROSE, not the link.

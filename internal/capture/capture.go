@@ -135,6 +135,12 @@ func Extract(text string, opts Options) []Candidate {
 		if len(cues) == 0 && isPureQuestion(prose) && !hasFirstPerson(prose) {
 			continue
 		}
+		// Task requests aimed at the agent ("幫我找找…嗎") are commands to
+		// execute, not facts to keep — the embedded 我 must not rescue them
+		// through the first-person plan exception (2 live FPs 2026-07-19).
+		if len(cues) == 0 && taskRequestRe.MatchString(prose) {
+			continue
+		}
 
 		imp := importance(trimmed, cues, ents)
 		if imp < opts.MinSalience {
@@ -405,6 +411,11 @@ func isPureQuestion(s string) bool {
 	if strings.HasSuffix(t, "?") || strings.HasSuffix(t, "？") {
 		return true
 	}
+	// Question-final particles arrive without punctuation ("…平底鍋嗎") —
+	// mami-style typing omits the ？ (live FPs 2026-07-19).
+	if strings.HasSuffix(t, "嗎") || strings.HasSuffix(t, "呢") {
+		return true
+	}
 	for _, p := range []string{"嗎？", "嗎?", "是不是", "為什麼", "怎麼會"} {
 		if strings.Contains(t, p) {
 			return true
@@ -412,6 +423,12 @@ func isPureQuestion(s string) bool {
 	}
 	return false
 }
+
+// taskRequestRe matches "do this for me" commands aimed at the agent
+// (幫我找/查/看, 可以幫我…嗎). The agent executes the task; the request
+// itself is not a durable fact — and its 我 must not trip the
+// first-person plan exception.
+var taskRequestRe = regexp.MustCompile(`^(?:那)?(?:可以|能不能|可不可以|麻煩)?(?:幫|替)我|^(?:can|could|would)\s+you\b|^(?:please\s+)?help\s+me\b`)
 
 // hasFirstPerson reports a first-person stake — the asker talking about their
 // own plans or situation ("所以我們下個月到機場之後..." is a plan, not an inquiry).
