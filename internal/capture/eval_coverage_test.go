@@ -89,6 +89,10 @@ var coverageCorpus = []coverageCase{
 	// the morning's allergy-bump symptom captured, its recovery didn't,
 	// leaving the memory actively stale). Cases synthetic per no-life-data.
 	{text: "手臂上的紅疹癢癢消了，不腫了", class: "zh-health"},
+	// Infixed pain forms (live miss 2026-07-18 evening): 頭「有點」痛 splits
+	// the 頭痛 compound; degree adverbs sit between body part and 痛.
+	{text: "我的頭有點痛，可能是因為太熱有點中暑", class: "zh-health"},
+	{text: "肚子好痛，剛剛吃太快了", class: "zh-health"},
 	{text: "喉嚨痛好多了，昨天的藥有效", class: "zh-health"},
 	// Chinese turns-out/conclusion markers — three live misses (a sensor
 	// diagnosis, a transit fare discovery, an undercooking lesson).
