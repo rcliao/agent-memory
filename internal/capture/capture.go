@@ -428,7 +428,7 @@ func isPureQuestion(s string) bool {
 // (幫我找/查/看, 可以幫我…嗎). The agent executes the task; the request
 // itself is not a durable fact — and its 我 must not trip the
 // first-person plan exception.
-var taskRequestRe = regexp.MustCompile(`^(?:那)?(?:可以|能不能|可不可以|麻煩)?(?:幫|替)我|^(?:can|could|would)\s+you\b|^(?:please\s+)?help\s+me\b`)
+var taskRequestRe = regexp.MustCompile(`^(?:還是|那|嗯)?(?:請|麻煩)?(?:你們?|妳們?)?(?:再|先|順便|也)?(?:可以|能不能|可不可以)?(?:幫|替)我|^(?:can|could|would)\s+you\b|^(?:please\s+)?help\s+me\b`)
 
 // hasFirstPerson reports a first-person stake — the asker talking about their
 // own plans or situation ("所以我們下個月到機場之後..." is a plan, not an inquiry).
