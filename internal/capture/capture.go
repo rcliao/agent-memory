@@ -112,7 +112,10 @@ func Extract(text string, opts Options) []Candidate {
 		// Bullet-line fragments ("-One Mighty的吐司+spread") are pieces of a
 		// structured message, not standalone facts — without an intent cue
 		// the line rides on its parent memo (live FP 2026-07-18).
-		if len(cues) == 0 && bulletLineRe.MatchString(trimmed) {
+		if bulletLineRe.MatchString(trimmed) &&
+			(len(cues) == 0 || (len(cues) == 1 && cues[0] == "fact")) {
+			// The numeric fact cue fires on spec rows ("商品重量：0.63kg") —
+			// units in reference data are not personal facts.
 			continue
 		}
 		// Entity extraction tokenizes on spaces, so Latin names embedded in a
@@ -337,8 +340,10 @@ var bareURLRe = regexp.MustCompile(`^https?://\S+$`)
 // of a turn (optionally after a "User: " speaker prefix).
 var a2aRelayRe = regexp.MustCompile(`^(?:\w+:\s*)?\[\S+ \(your fellow agent\) said this in the group`)
 
-// bulletLineRe matches memo-style list-item lines.
-var bulletLineRe = regexp.MustCompile(`^[-–•▫️*]\s*\S`)
+// bulletLineRe matches memo-style list-item lines, decorated headers
+// (☆名稱：…), and label：value spec-sheet rows — pasted product listings
+// are reference data, not user prose (3 live FPs 2026-07-19).
+var bulletLineRe = regexp.MustCompile(`^[-–•▫️*☆★※◎]\s*\S|^[^：\s]{1,8}：`)
 
 // countNonVocative returns how many entities are NOT in vocative position:
 // at the segment end right after a CJK vocative particle, or leading the

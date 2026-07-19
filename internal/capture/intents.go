@@ -37,7 +37,7 @@ var intents = []intent{
 	// Standing instructions / boundaries: rules about future conduct.
 	{"boundary", 0.26, regexp.MustCompile(`(?i)\b(?:please\s+)?never\s+(?:share|send|post|tell|mention|give|use)\b|\bfrom\s+now\s+on\b|\bdon'?t\s+(?:send|share|text|message|call|post|tell|schedule|book)\b|\bmake\s+sure\s+(?:to|you|we)\b|\bbe\s+sure\s+to\b|以後|從現在開始|之後都|不要(?:再)?(?:傳|放|加|用|說|提)|別再|千萬不要|記得(?:要|以後)`)},
 	// Gotchas / confirmed learnings worth not re-discovering.
-	{"gotcha", 0.18, regexp.MustCompile(`(?i)\b(turns out|gotcha|the trick is|note that|remember to|important:|caveat|watch out|by default|the fix (?:is|was)|root cause)\b|看來|原來|居然`)},
+	{"gotcha", 0.18, regexp.MustCompile(`(?i)\b(turns out|gotcha|the trick is|note that|remember to|important:|caveat|watch out|by default|the fix (?:is|was)|root cause)\b|看來(?:[^看]|$)|原來|居然`)},
 	// Procedural / how-to: imperatives and command-shaped text. CLI verbs are
 	// anchored to the segment start or a shell prompt so prose words like "go"
 	// or "make" don't false-fire (e.g. "Go code", "make sense").
