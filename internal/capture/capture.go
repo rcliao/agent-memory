@@ -104,7 +104,11 @@ func Extract(text string, opts Options) []Candidate {
 			trimmed = trimmed[:maxSegmentLen]
 		}
 
-		cues := classify(trimmed)
+		// Grade cues and gate entities on the PROSE only — URLs stay in the
+		// stored content as referents, but their innards must not fire cues
+		// (%E4… matches the numeric fact pattern) or mint entities.
+		prose := stripURLs(trimmed)
+		cues := classify(prose)
 		// Bullet-line fragments ("-One Mighty的吐司+spread") are pieces of a
 		// structured message, not standalone facts — without an intent cue
 		// the line rides on its parent memo (live FP 2026-07-18).
@@ -114,21 +118,21 @@ func Extract(text string, opts Options) []Candidate {
 		// Entity extraction tokenizes on spaces, so Latin names embedded in a
 		// CJK run ("看了Milo的燈") are invisible without padding the script
 		// boundaries first. Stored content stays original.
-		ents := entity.Extract(padScriptBoundaries(trimmed))
+		ents := entity.Extract(padScriptBoundaries(prose))
 
 		// A segment is worth remembering only if it carries an intent cue or a
 		// named entity. Pure chatter ("haha ok thanks") has neither and is
 		// dropped. A name in VOCATIVE position ("週末我不想那麼早起欸Nova",
 		// "Nova 我回來囉") is the addressee, not subject matter — it cannot be
 		// the entity that qualifies the segment (2 live FPs 2026-07-18).
-		if len(cues) == 0 && countNonVocative(trimmed, ents) == 0 {
+		if len(cues) == 0 && countNonVocative(prose, ents) == 0 {
 			continue
 		}
 		// Entity-only pure questions are inquiries ABOUT the world, not facts
 		// about the asker ("你們知道Paze嗎？" made Paze a "memory" — 4 live
 		// FPs). A question still captures when an intent cue fired or when it
 		// states the asker's own plan (first-person marker present).
-		if len(cues) == 0 && isPureQuestion(trimmed) && !hasFirstPerson(trimmed) {
+		if len(cues) == 0 && isPureQuestion(prose) && !hasFirstPerson(prose) {
 			continue
 		}
 
@@ -243,9 +247,17 @@ func splitSpeaker(line string) (speaker, body string) {
 func splitSentences(s string) []string {
 	var out []string
 	var b strings.Builder
-	for _, r := range s {
+	runes := []rune(s)
+	for i, r := range runes {
 		b.WriteRune(r)
-		if r == '.' || r == '!' || r == '?' || r == '\n' || r == '。' || r == '！' || r == '？' {
+		terminator := r == '!' || r == '\n' || r == '。' || r == '！' || r == '？'
+		// '.' and '?' split only at a word boundary — mid-token they are
+		// URL/decimal structure ("shop.example.com", "3.99"), and splitting
+		// there shreds links into cue-firing fragments (live FP 2026-07-19).
+		if (r == '.' || r == '?') && (i+1 == len(runes) || runes[i+1] == ' ' || runes[i+1] == '\t') {
+			terminator = true
+		}
+		if terminator {
 			out = append(out, b.String())
 			b.Reset()
 		}
@@ -254,6 +266,16 @@ func splitSentences(s string) []string {
 		out = append(out, b.String())
 	}
 	return out
+}
+
+// stripURLs removes http(s) links so cue and entity grading see only the
+// user's prose — percent-encoded paths fire the numeric fact cue (%E4…)
+// and link innards mint bogus entities. The URL itself stays in the stored
+// content as the referent.
+var urlTokenRe = regexp.MustCompile(`https?://\S+`)
+
+func stripURLs(s string) string {
+	return strings.TrimSpace(urlTokenRe.ReplaceAllString(s, " "))
 }
 
 func normalizeContent(s string) string {

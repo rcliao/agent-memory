@@ -134,6 +134,10 @@ var chatterCorpus = []string{
 	// itself is handled by the memo skill, and the line has no cue.
 	"-Sunrise Bakery的全麥吐司+花生醬",
 	"- 一顆水煮蛋",
+	// Question + link (2 live FPs, 2026-07-19): percent-encoded URLs fire
+	// the numeric fact cue (%E4… matches digit+%), and URL innards mint
+	// entities — cue and entity gates must grade the PROSE, not the link.
+	"這個筷子好嗎？ https://shop.example.com/gdsale/%E4%BA%94%E9%9B%99-Duraware-Snapzon-Set",
 	// Device-control tokens (2 live FPs, 2026-07-18): all-caps UI labels
 	// (ON/OFF) qualified a transient troubleshooting step as entity-bearing.
 	"我們剛剛就是從原本的ON 調到OFF，再調回ON都沒亮",
