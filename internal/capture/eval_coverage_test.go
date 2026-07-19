@@ -140,6 +140,7 @@ var chatterCorpus = []string{
 	// first-person exception (幫"我") must not rescue commands.
 	"可以幫我找找Solaris牌有沒有20cm左右的不鏽鋼平底鍋嗎",
 	"幫我查一下Northwind簽證要準備哪些文件",
+	"還是你們再幫我確認Solaris是不是真的台灣製",
 	// Question + link (2 live FPs, 2026-07-19): percent-encoded URLs fire
 	// the numeric fact cue (%E4… matches digit+%), and URL innards mint
 	// entities — cue and entity gates must grade the PROSE, not the link.
