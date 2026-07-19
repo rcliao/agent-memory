@@ -194,3 +194,14 @@ func TestURLAfterFilteredSpeakerDropped(t *testing.T) {
 		}
 	}
 }
+
+// 看來看去 ("looking around") must not fire the 看來 turns-out cue — a
+// browsing remark is not a conclusion (live mis-attribution 2026-07-19).
+func TestKanlaiIdiomNotGotcha(t *testing.T) {
+	if cues := classify("看來看去我覺得這兩款還可以"); len(cues) != 0 {
+		t.Errorf("看來看去 fired cues %v", cues)
+	}
+	if cues := classify("看來我還是要煮熟一點"); len(cues) == 0 || cues[0] != "gotcha" {
+		t.Errorf("real 看來 conclusion lost its gotcha cue: %v", cues)
+	}
+}

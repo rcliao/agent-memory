@@ -138,6 +138,11 @@ var chatterCorpus = []string{
 	// itself is handled by the memo skill, and the line has no cue.
 	"-Sunrise Bakery的全麥吐司+花生醬",
 	"- 一顆水煮蛋",
+	// Pasted spec-sheet lines (3 live FPs, 2026-07-19): label：value rows
+	// from a quoted product listing are reference data, not user prose.
+	"型號：SMY-TC09",
+	"商品重量：0.63kg",
+	"☆名稱：Solaris 雙電壓收納輕巧小奶鍋 SMY-TC09",
 	// Task-request questions (2 live FPs, 2026-07-19): "幫我找找…嗎" is a
 	// command the agent executes, not a fact about the asker — and the
 	// trailing 嗎 often arrives without ？, dodging the suffix check. The
