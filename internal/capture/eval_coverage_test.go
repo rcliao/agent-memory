@@ -143,6 +143,11 @@ var chatterCorpus = []string{
 	"型號：SMY-TC09",
 	"商品重量：0.63kg",
 	"☆名稱：Solaris 雙電壓收納輕巧小奶鍋 SMY-TC09",
+	// ASCII label:value rows leak past the full-width guard (2 live FPs,
+	// 2026-07-19): a pasted "Expected Release Date: Q2 2027" is reference
+	// data with no referent of its own.
+	"Expected Release Date: Q2 2027",
+	"Preorder until: 8/7/2026",
 	// Task-request questions (2 live FPs, 2026-07-19): "幫我找找…嗎" is a
 	// command the agent executes, not a fact about the asker — and the
 	// trailing 嗎 often arrives without ？, dodging the suffix check. The
