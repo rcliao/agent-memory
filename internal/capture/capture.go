@@ -343,7 +343,7 @@ var a2aRelayRe = regexp.MustCompile(`^(?:\w+:\s*)?\[\S+ \(your fellow agent\) sa
 // bulletLineRe matches memo-style list-item lines, decorated headers
 // (☆名稱：…), and label：value spec-sheet rows — pasted product listings
 // are reference data, not user prose (3 live FPs 2026-07-19).
-var bulletLineRe = regexp.MustCompile(`^[-–•▫️*☆★※◎]\s*\S|^[^：\s]{1,8}：`)
+var bulletLineRe = regexp.MustCompile(`^[-–•▫️*☆★※◎]\s*\S|^[^：\s]{1,8}：|^[A-Za-z][A-Za-z ]{0,30}:\s`)
 
 // countNonVocative returns how many entities are NOT in vocative position:
 // at the segment end right after a CJK vocative particle, or leading the
