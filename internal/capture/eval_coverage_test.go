@@ -128,6 +128,14 @@ var chatterCorpus = []string{
 	"你們知道Paze嗎？是不是像Venmo？",
 	"為什麼換Nova不見了？",
 	"Why does the Rivelo EV make engine noise while charging?",
+	// Enumeration lines under a question (2 live FPs, 2026-07-19): a list
+	// supporting a question ("can he still eat X? he had A, B, C today")
+	// is the question's context — subject-less, so a standalone memory
+	// would silently misattribute it to the speaker.
+	"今天Nova吃了這些甜點還能再吃冰淇淋嗎？\n早上吃了半個蛋糕和一個Solaris tart\n下午喝了Northwind的奶油泡芙",
+	// Leading vocative without punctuation (live FP 2026-07-19): a name
+	// followed directly by 你/妳 is address, not subject matter.
+	"Nova你給我的圖片是Leo/need",
 	// Vocative agent-name chatter (2 live FPs, 2026-07-18): the addressed
 	// name is the segment's only entity — transient remarks aimed AT an
 	// agent are not facts about the speaker's world.

@@ -205,3 +205,21 @@ func TestKanlaiIdiomNotGotcha(t *testing.T) {
 		t.Errorf("real 看來 conclusion lost its gotcha cue: %v", cues)
 	}
 }
+
+// The addressed-at-agent guard must not swallow facts told TO an agent —
+// those carry intent cues — nor English subject-position names.
+func TestAddressedGuardKeepsCuedFacts(t *testing.T) {
+	keep := []string{
+		"Nova, 我對芹菜過敏，煮菜的時候不要放。",     // health/fact cue survives
+		"Nova make sure to update the reading list.", // subject position, cue
+		"剛剛看了Milo的燈又在閃爍，看起來像是感應器的問題。", // name mid-sentence
+	}
+	for _, s := range keep {
+		if len(Extract(s, Options{})) == 0 {
+			t.Errorf("addressed guard swallowed a real fact: %q", s)
+		}
+	}
+	if len(Extract("Nova你給我的圖片是Leo/need", Options{})) != 0 {
+		t.Errorf("meta-conversation still captured")
+	}
+}

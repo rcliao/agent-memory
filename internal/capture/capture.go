@@ -82,7 +82,15 @@ func Extract(text string, opts Options) []Candidate {
 	seenKeys := map[string]int{}
 	seenContent := map[string]bool{}
 
-	for _, seg := range segment(text, filter) {
+	segs := segment(text, filter)
+	// A turn that opens with a pure question is ASKING something; the lines
+	// under it enumerate the question's context ("can he still eat ice
+	// cream? he had A, B, C today"). Those lines elide their subject, so
+	// standalone memories from them silently misattribute (2 live FPs
+	// 2026-07-19). Cue-carrying or first-person lines still capture.
+	leadIsQuestion := len(segs) > 0 && isPureQuestion(stripURLs(strings.TrimSpace(segs[0])))
+
+	for i, seg := range segs {
 		trimmed := strings.TrimSpace(seg)
 		// Bridge-generated media placeholders ("(sticker) [emoji: ...]",
 		// "(photo)") are transport metadata, not user prose — entity-bearing
@@ -136,6 +144,15 @@ func Extract(text string, opts Options) []Candidate {
 		// FPs). A question still captures when an intent cue fired or when it
 		// states the asker's own plan (first-person marker present).
 		if len(cues) == 0 && isPureQuestion(prose) && !hasFirstPerson(prose) {
+			continue
+		}
+		// Enumeration under a leading question (see leadIsQuestion above).
+		if i > 0 && leadIsQuestion && len(cues) == 0 && !hasFirstPerson(prose) {
+			continue
+		}
+		// Meta-conversation addressed at the agent ("Nova你給我的圖片是…") is
+		// about this turn, not the world (live FP 2026-07-19).
+		if len(cues) == 0 && addressedToAgent(prose) {
 			continue
 		}
 		// Task requests aimed at the agent ("幫我找找…嗎") are commands to
@@ -365,6 +382,21 @@ func countNonVocative(seg string, ents []entity.Entity) int {
 	return n
 }
 
+// addressedRe matches a turn that OPENS by addressing someone by name:
+// a capitalised name butted against a second-person pronoun ("Nova你給我的
+// 圖片是…") or set off by a comma before CJK prose ("Nova，剛剛那張…"). The
+// leading name is often invisible to the NER (sentence-initial capitals are
+// discounted), so this is a pattern check rather than an entity check.
+var addressedRe = regexp.MustCompile(`^[A-Z][A-Za-z]{1,15}(?:[你妳]|[，,]\s*\p{Han})`)
+
+// addressedToAgent reports meta-conversation aimed at the listener — about
+// what the agent just did, not about the world. A real fact told to an agent
+// carries an intent cue ("皮卡，我現在吃xyzal過敏藥" fires health), so the cue
+// path keeps those.
+func addressedToAgent(seg string) bool {
+	return addressedRe.MatchString(strings.TrimSpace(seg))
+}
+
 func isShortCapsToken(s string) bool {
 	if len(s) > 3 {
 		return false
@@ -403,6 +435,12 @@ func isVocative(seg, name string) bool {
 	if strings.HasPrefix(low, lname) {
 		rest := []rune(seg[len(name):])
 		if len(rest) >= 2 && (rest[0] == '，' || rest[0] == ',' || rest[0] == ' ') && containsCJKRune(string(rest[1:2])) {
+			return true
+		}
+		// Unpunctuated address: a name butted straight against a
+		// second-person pronoun ("Nova你給我的圖片是…") is who is being
+		// spoken TO. Particles (Milo的燈) stay subject matter.
+		if len(rest) >= 1 && (rest[0] == '你' || rest[0] == '妳') {
 			return true
 		}
 	}
