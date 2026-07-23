@@ -74,7 +74,7 @@ echo "$TRANSCRIPT_TEXT" | "$GHOST" capture \
   -t "project:${PROJECT_NAME},date:${DATE}" \
   --min-salience "$MIN_SALIENCE" \
   --max "$MAX_CAP" \
-  "${SPEAKER_ARG[@]}" \
+  ${SPEAKER_ARG[@]+"${SPEAKER_ARG[@]}"} \
   >> "$DEBUG_LOG" 2>&1 || echo "capture failed (non-fatal)" >> "$DEBUG_LOG"
 
 # Lightweight reflect so new memories flow through the lifecycle. Silent on error.
