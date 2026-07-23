@@ -77,7 +77,7 @@ TRANSCRIPT_TEXT=$(tail -n "+$((LAST_LINES + 1))" "$TRANSCRIPT_PATH" | jq -r '
      elif ($c|type)=="array" then ($c | map(select(.type=="text") | .text) | join(" "))
      else "" end) as $t
   | select(($t|length) > 0)
-  | "\($sp[0:1]|ascii_upcase)\($sp[1:]): \($t)"
+  | "\($sp[0:1]|ascii_upcase)\($sp[1:]): \($t | gsub("[\\n\\r]+"; " "))"
 ' 2>> "$DEBUG_LOG" | awk '
   /\[Ghost Memory[^]]*\]/ {ghost=1}
   ghost && /\[End Ghost Memory\]/ {ghost=0; next}
