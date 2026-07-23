@@ -3,37 +3,15 @@
 package embedding
 
 import (
-	"os"
-	"runtime"
-	"strconv"
-
 	"github.com/knights-analytics/hugot"
-	"github.com/knights-analytics/hugot/options"
 )
 
-// makeEmbedderSession uses the ONNX Runtime backend with all CPU cores for
-// the embedder forward pass. See reranker_ort.go for setup; the same
-// onnxruntime + libtokenizers install covers both.
+// makeEmbedderSession uses the ONNX Runtime backend for the embedder
+// forward pass. The session is shared with the reranker (see
+// ort_shared.go) because hugot allows only one ORT session per process.
+// Thread counts are configured on the shared session via
+// GHOST_ORT_INTRA_THREADS / GHOST_ORT_INTER_THREADS; the same
+// onnxruntime + libtokenizers install covers both consumers.
 func makeEmbedderSession() (*hugot.Session, error) {
-	intra := runtime.NumCPU()
-	if v := os.Getenv("GHOST_ORT_INTRA_THREADS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			intra = n
-		}
-	}
-	inter := 1
-	if v := os.Getenv("GHOST_ORT_INTER_THREADS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			inter = n
-		}
-	}
-
-	opts := []options.WithOption{
-		options.WithIntraOpNumThreads(intra),
-		options.WithInterOpNumThreads(inter),
-	}
-	if lib := os.Getenv("GHOST_ONNXRUNTIME_PATH"); lib != "" {
-		opts = append(opts, options.WithOnnxLibraryPath(lib))
-	}
-	return hugot.NewORTSession(opts...)
+	return sharedORTSession()
 }

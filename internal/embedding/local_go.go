@@ -12,3 +12,10 @@ import "github.com/knights-analytics/hugot"
 func makeEmbedderSession() (*hugot.Session, error) {
 	return hugot.NewGoSession()
 }
+
+// destroySession releases a session. On the pure-Go backend each consumer
+// owns its own session; on the ORT backend this is a no-op because the
+// session is shared process-wide (see ort_shared.go).
+func destroySession(s *hugot.Session) {
+	s.Destroy()
+}

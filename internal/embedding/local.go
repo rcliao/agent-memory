@@ -126,7 +126,7 @@ func (e *LocalEmbedder) init() error {
 	}
 	pipeline, err := hugot.NewPipeline[*pipelines.FeatureExtractionPipeline](session, config)
 	if err != nil {
-		session.Destroy()
+		destroySession(session)
 		e.initErr = fmt.Errorf("create pipeline: %w", err)
 		return e.initErr
 	}
@@ -201,7 +201,7 @@ func (e *LocalEmbedder) Close() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.session != nil {
-		e.session.Destroy()
+		destroySession(e.session)
 		e.session = nil
 	}
 }

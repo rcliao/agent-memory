@@ -102,7 +102,7 @@ func (r *LocalReranker) init() error {
 	}
 	pipeline, err := hugot.NewPipeline[*pipelines.CrossEncoderPipeline](session, config)
 	if err != nil {
-		session.Destroy()
+		destroySession(session)
 		r.initErr = fmt.Errorf("create reranker pipeline: %w", err)
 		return r.initErr
 	}
@@ -147,7 +147,7 @@ func (r *LocalReranker) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.session != nil {
-		r.session.Destroy()
+		destroySession(r.session)
 		r.session = nil
 	}
 }
