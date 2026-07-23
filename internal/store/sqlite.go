@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -32,6 +33,7 @@ type SQLiteStore struct {
 	// this binary supports — writes are refused (see contract.go).
 	contractReadOnly bool
 	reranker embedding.Reranker
+	rerankErrOnce sync.Once // one-shot warn when the reranker fails (see rerankMaxP)
 	nowFn    func() time.Time // injectable clock; nil means time.Now
 }
 

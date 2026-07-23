@@ -1176,7 +1176,16 @@ func (s *SQLiteStore) rerankMaxP(ctx context.Context, query string, results []Se
 			if ctx.Err() != nil {
 				break // deadline mid-inference: keep the partial head
 			}
-			return results // model failure: fall back to fused order
+			// Model failure: fall back to fused order — but say so ONCE.
+			// A misconfigured backend (wrong GHOST_ONNXRUNTIME_PATH) fails
+			// on every call, and the silent fallback made a fleet run
+			// rerankerless while reporting reranker=true (found 2026-07-23
+			// benchmarking the ORT build: 0ms "reranks" looked like a
+			// speedup until scores were inspected).
+			s.rerankErrOnce.Do(func() {
+				fmt.Fprintf(os.Stderr, "ghost: reranker disabled after error (falling back to fused order): %v\n", err)
+			})
+			return results
 		}
 		for _, rr := range reranked {
 			if rr.Score > docMaxScore[i] {
