@@ -69,7 +69,7 @@ func (r *LocalReranker) init() error {
 	}
 	r.inited = true
 
-	fmt.Fprintf(os.Stderr, "ghost: reranker backend: %s\n", RerankerBackend)
+	fmt.Fprintf(os.Stderr, "ghost: reranker backend: %s\n", rerankerBackendName)
 
 	if err := os.MkdirAll(r.modelsDir, 0o755); err != nil {
 		r.initErr = fmt.Errorf("create models dir: %w", err)
@@ -104,7 +104,7 @@ func (r *LocalReranker) init() error {
 	}
 	pipeline, err := hugot.NewPipeline[*pipelines.CrossEncoderPipeline](session, config)
 	if err != nil {
-		session.Destroy()
+		destroySession(session)
 		r.initErr = fmt.Errorf("create reranker pipeline: %w", err)
 		return r.initErr
 	}
@@ -149,7 +149,7 @@ func (r *LocalReranker) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.session != nil {
-		r.session.Destroy()
+		destroySession(r.session)
 		r.session = nil
 	}
 }
