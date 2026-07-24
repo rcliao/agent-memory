@@ -21,6 +21,22 @@ if [ -z "$QUERY" ] || [ ${#QUERY} -lt 10 ]; then
   exit 0  # Skip trivial prompts
 fi
 
+# Buffer the raw prompt for the mechanical capture tier (ghost-stop-heuristic.sh).
+# This hook receives .prompt — exactly what the user typed — whereas the Stop
+# hook only has the transcript, where user speech is multiplexed with harness
+# control messages, hook-injected context, skill bodies and tool results, all
+# labelled type=user. Pattern-stripping that stream repeatedly failed (junk
+# regenerated under new keys), so capture reads THIS buffer instead: clean user
+# speech by construction. Slash commands and automation prompts are excluded
+# here rather than downstream.
+PROMPT_BUF="/tmp/ghost-prompt-buffer/${SESSION_ID:-default}.txt"
+mkdir -p "$(dirname "$PROMPT_BUF")" 2>/dev/null || true
+case "$QUERY" in
+  /*|'<'*|"Run ~/"*) : ;;                       # slash command, harness tag, cron prompt
+  *"ghost-monitor.sh"*) : ;;                    # scheduled monitor prompt
+  *) printf 'User: %s\n' "$(printf '%s' "$QUERY" | tr '\n\r' '  ')" >> "$PROMPT_BUF" 2>/dev/null || true ;;
+esac
+
 # No project tag filter — let relevance scoring do the work instead of
 # hard-filtering. Cross-project knowledge is often valuable.
 
