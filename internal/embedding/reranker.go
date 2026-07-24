@@ -69,6 +69,8 @@ func (r *LocalReranker) init() error {
 	}
 	r.inited = true
 
+	fmt.Fprintf(os.Stderr, "ghost: reranker backend: %s\n", rerankerBackendName)
+
 	if err := os.MkdirAll(r.modelsDir, 0o755); err != nil {
 		r.initErr = fmt.Errorf("create models dir: %w", err)
 		return r.initErr
