@@ -11,6 +11,9 @@ import (
 	"github.com/knights-analytics/hugot/options"
 )
 
+// RerankerBackend identifies the compiled inference backend (see reranker_go.go).
+const RerankerBackend = "onnxruntime (multi-threaded)"
+
 // makeRerankerSession creates a hugot session using the ONNX Runtime backend.
 // Requires a system-installed onnxruntime shared library:
 //
