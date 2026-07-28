@@ -26,8 +26,26 @@ func (s *SQLiteStore) UtilityInc(ctx context.Context, id string) error {
 // Returns the number of chunks updated. The callback is called after each chunk
 // with (completed, total, skipped) counts for progress reporting.
 func (s *SQLiteStore) BackfillEmbeddings(ctx context.Context, progressFn func(done, total, skipped int)) (int, error) {
+	return s.backfillEmbeddings(ctx, false, progressFn)
+}
+
+// ReembedAll clears every stored embedding and regenerates with the current
+// embedder — the migration path for an embedding-model change, where existing
+// vectors live in the old model's space and mixing spaces breaks similarity.
+// Must run through the store (not raw sqlite): the FTS triggers reference the
+// cjk_segment function only ghost's connections register.
+func (s *SQLiteStore) ReembedAll(ctx context.Context, progressFn func(done, total, skipped int)) (int, error) {
+	return s.backfillEmbeddings(ctx, true, progressFn)
+}
+
+func (s *SQLiteStore) backfillEmbeddings(ctx context.Context, clearFirst bool, progressFn func(done, total, skipped int)) (int, error) {
 	if s.embedder == nil {
 		return 0, fmt.Errorf("no embedding provider configured")
+	}
+	if clearFirst {
+		if _, err := s.db.ExecContext(ctx, `UPDATE chunks SET embedding = NULL`); err != nil {
+			return 0, fmt.Errorf("clear embeddings: %w", err)
+		}
 	}
 
 	// Count chunks needing embeddings

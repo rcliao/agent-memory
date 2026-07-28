@@ -17,10 +17,11 @@ var embedCmd = &cobra.Command{
 }
 
 func init() {
+	var reembedAll bool
 	backfillCmd := &cobra.Command{
 		Use:   "backfill",
 		Short: "Generate embeddings for all chunks that don't have one",
-		Long:  "Generates vector embeddings for existing memory chunks that were stored before embeddings were enabled. This is a one-time operation.",
+		Long:  "Generates vector embeddings for existing memory chunks that were stored before embeddings were enabled. This is a one-time operation.\n\nWith --all, clears every stored embedding first and regenerates with the current embedder — the migration path for an embedding-model change (old vectors live in the old model's space; mixing spaces breaks similarity).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sqlStore, ok := st.(*store.SQLiteStore)
 			if !ok {
@@ -31,7 +32,12 @@ func init() {
 			fmt.Fprintln(cmd.OutOrStdout(), "Backfilling embeddings...")
 
 			skipped := 0
-			updated, err := sqlStore.BackfillEmbeddings(ctx, func(done, total, skip int) {
+			backfill := sqlStore.BackfillEmbeddings
+			if reembedAll {
+				fmt.Fprintln(cmd.OutOrStdout(), "(--all: clearing existing embeddings, regenerating with current model)")
+				backfill = sqlStore.ReembedAll
+			}
+			updated, err := backfill(ctx, func(done, total, skip int) {
 				skipped = skip
 				if done%50 == 0 || done == total {
 					fmt.Fprintf(cmd.OutOrStdout(), "  %d/%d chunks embedded", done, total)
@@ -54,5 +60,6 @@ func init() {
 		},
 	}
 
+	backfillCmd.Flags().BoolVar(&reembedAll, "all", false, "clear ALL embeddings first and regenerate (embedding-model migration)")
 	embedCmd.AddCommand(backfillCmd)
 }
