@@ -40,6 +40,19 @@ var supportedLocalModels = map[string]localModelSpec{
 		dims:     768,
 		onnxPath: "onnx/" + defaultOnnxFile,
 	},
+	// Multilingual candidates — the household chats in mixed zh-TW/English
+	// and English-centric models cannot bridge scripts (measured 2026-07-28:
+	// all-MiniLM cross-lingual recall 1/20).
+	"paraphrase-multilingual-MiniLM-L12-v2": {
+		hfName:   "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+		dims:     384,
+		onnxPath: "onnx/" + defaultOnnxFile,
+	},
+	"multilingual-e5-small": {
+		hfName:   "intfloat/multilingual-e5-small",
+		dims:     384,
+		onnxPath: "onnx/" + defaultOnnxFile,
+	},
 }
 
 // defaultLocalModel is the model used when GHOST_EMBED_MODEL_LOCAL is not set.
