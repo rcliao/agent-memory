@@ -104,7 +104,7 @@ Default weights by relation type:
 - **Core**: contradicts=0.9, refines=0.8, depends_on=0.7, contains=0.6, relates_to=0.5, merged_into=0.0 (audit trail only)
 - **Reasoning**: implies=0.8, caused_by=0.75, prevents=0.7 (for cognitive-memory traversal; not auto-linked, require explicit creation)
 
-**Auto-linking**: On `put`, Ghost computes embedding similarity against existing memories in the same namespace. Memories above the threshold (default 0.80, configurable via `GHOST_EDGE_THRESHOLD`) automatically get `relates_to` edges.
+**Auto-linking**: On `put`, Ghost computes embedding similarity against existing memories in the same namespace. Memories above the threshold (default 0.85, configurable via `GHOST_EDGE_THRESHOLD`) automatically get `relates_to` edges.
 
 **Re-linking**: When a memory is versioned (new ID), all edges referencing the old ID are updated to point to the new ID.
 
@@ -273,7 +273,7 @@ All original memories are preserved — summaries are derived views. This follow
 Edges have their own lifecycle managed alongside memory nodes:
 
 - **Co-retrieval strengthening** (Hebbian learning — "fire together, wire together"): When two connected memories appear together in a `ghost_context` response, their shared edge is strengthened: `weight += 0.05 × (1 - weight)` (diminishing returns approaching 1.0), `access_count++`, `last_accessed_at` updated.
-- **Auto-linking on put**: When a memory is stored, Ghost computes embedding similarity against existing memories in the same namespace. Memories above the threshold (default 0.80, configurable via `GHOST_EDGE_THRESHOLD`) automatically get `relates_to` edges with weight = similarity score.
+- **Auto-linking on put**: When a memory is stored, Ghost computes embedding similarity against existing memories in the same namespace. Memories above the threshold (default 0.85, configurable via `GHOST_EDGE_THRESHOLD`) automatically get `relates_to` edges with weight = similarity score.
 - **Edge re-linking**: When a memory is versioned (new ID supersedes old), all edges referencing the old ID are updated to point to the new ID within the same transaction.
 - **Edge decay**: During reflect, edges not accessed in 30+ days with <3 accesses have their weight multiplied by 0.9.
 - **Edge pruning**: Edges with weight < 0.05 are automatically deleted during reflect.
