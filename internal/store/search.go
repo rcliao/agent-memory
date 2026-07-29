@@ -722,6 +722,16 @@ func (s *SQLiteStore) Search(ctx context.Context, p SearchParams) ([]SearchResul
 	// GHOST_RERANK_TEMPORAL=1 forces rerank on temporal queries anyway.
 	rerankTemporalOK := !hasTemporalIntent(p.Query) || envBool("GHOST_RERANK_TEMPORAL")
 	if s.reranker != nil && len(results) > 1 && rerankTemporalOK {
+		// Cross-script windows skip the CE — see crossscript.go.
+		n := len(results)
+		if n > 20 {
+			n = 20
+		}
+		if crossScriptQuery(p.Query, results[:n]) {
+			rerankTemporalOK = false
+		}
+	}
+	if s.reranker != nil && len(results) > 1 && rerankTemporalOK {
 		// Rerank window is capped independently of the pool: large callers
 		// (Context fetches 50 candidates) must not multiply cross-encoder
 		// cost. Measured on a 58k-chunk production DB: reranking the full
