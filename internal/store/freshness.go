@@ -121,6 +121,23 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 		FromNS: ns, FromKey: key, ToNS: ns, ToKey: bestKey, Rel: "contradicts",
 	})
 
+	// ...and contradicts everything the old fact already contradicted. A fact
+	// revised three times (Webpack -> Vite -> esbuild) otherwise leaves the
+	// OLDEST version linked only to the middle one: pull v1 and v3 into
+	// context without v2 and the agent reads "we use Webpack" with nothing
+	// marking it stale. Found 2026-07-29 by the context-path FAMA instrument
+	// (eval_fama_context_test.go) — the Search-path FAMA cannot see it because
+	// ranking alone hid it. Depth-capped: only the direct ancestors of the
+	// fact being superseded, so a long chain stays O(chain), not O(chain^2).
+	for _, anc := range s.supersededAncestors(ctx, ns, bestKey) {
+		if anc == key {
+			continue
+		}
+		_, _ = s.CreateEdge(ctx, EdgeParams{
+			FromNS: ns, FromKey: key, ToNS: ns, ToKey: anc, Rel: "contradicts",
+		})
+	}
+
 	// Reconsolidation: the correction inherits the stale fact's standing
 	// BEFORE the demotion — the new trace takes over the old trace's
 	// strength, so an unrehearsed correction cannot rank below the
@@ -147,4 +164,39 @@ func (s *SQLiteStore) detectSupersede(ctx context.Context, newID, ns, key, conte
 	if bitemporalEnabled() {
 		s.invalidateMemory(ns, bestKey, s.now())
 	}
+}
+
+// supersededAncestors returns the keys of memories that `key` already
+// contradicts — i.e. the older versions in a revision chain. Used so a new
+// correction inherits contradicts edges to the whole chain, not just the
+// version it directly replaced.
+//
+// Bounded by supersedeChainCap: a pathological chain must not turn one write
+// into an unbounded edge fan-out. Newest ancestors first, since those are the
+// ones most likely to still be retrievable.
+const supersedeChainCap = 8
+
+func (s *SQLiteStore) supersededAncestors(ctx context.Context, ns, key string) []string {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT tm.key
+		FROM memory_edges e
+		JOIN memories fm ON fm.id = e.from_id
+		JOIN memories tm ON tm.id = e.to_id
+		WHERE e.rel = 'contradicts'
+		  AND fm.ns = ? AND fm.key = ?
+		  AND tm.ns = ? AND tm.deleted_at IS NULL
+		ORDER BY tm.created_at DESC
+		LIMIT ?`, ns, key, ns, supersedeChainCap)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if rows.Scan(&k) == nil {
+			out = append(out, k)
+		}
+	}
+	return out
 }
