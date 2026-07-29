@@ -187,6 +187,27 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		return nil, fmt.Errorf("insert memory: %w", err)
 	}
 
+	// Carry the rehearsal trace across the version boundary. Promotion is
+	// decided by COUNT(DISTINCT access day) over memory_accesses, which is
+	// keyed by memory_id — and every version gets a fresh ULID, so without
+	// this a rewrite silently resets a memory's entire rehearsal history to
+	// zero. (ns, key) is one slot: the days it was retrieved are facts about
+	// the slot, not about a particular revision of its wording.
+	//
+	// This is load-bearing for restatement aggregation: consolidating N
+	// sibling rewordings into one canonical key is only a win if the
+	// survivor keeps the rehearsal credit. Rows are MOVED, not copied, so
+	// repeated rewrites cannot grow the log.
+	if supersedes != nil {
+		_, _ = tx.ExecContext(ctx,
+			`UPDATE memory_accesses SET memory_id = ? WHERE memory_id = ?`, id, prevID)
+		_, _ = tx.ExecContext(ctx,
+			`UPDATE memories SET access_count = (
+				SELECT COALESCE(MAX(access_count), 0) FROM memories
+				WHERE ns = ? AND key = ? AND id != ?
+			 ) WHERE id = ?`, p.NS, p.Key, id, id)
+	}
+
 	// Chunk the content and batch-embed all chunks at once
 	chunks := chunker.Chunk(p.Content, chunker.DefaultOptions())
 
