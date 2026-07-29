@@ -157,9 +157,9 @@ var builtinRules = []ReflectRule{
 		Scope:     "reflect",
 		Priority:  90,
 		CreatedBy: "system",
-		// Raised threshold: requires 20+ accesses (well-tested) and utility < 0.05
-		// (nearly zero signal). Previous threshold (5 accesses, 0.2 utility) was
-		// too aggressive — with zero utility tracking, it would delete everything.
+		// Requires 20+ accesses (well-tested) and utility < 0.05 (nearly zero
+		// signal). An earlier threshold (5 accesses, 0.2 utility) was too
+		// aggressive — with zero utility tracking, it would delete everything.
 		Cond:   RuleCond{AccessGT: 20, UtilityLT: 0.05},
 		Action: RuleAction{Op: "DEMOTE", Params: map[string]any{"to_tier": "dormant"}},
 	},
@@ -326,11 +326,23 @@ func (s *SQLiteStore) Reflect(ctx context.Context, p ReflectParams) (*ReflectRes
 			// distinct days; the prune spares spaced memories and grants a
 			// 72h grace window to earn spacing. Memories with no log rows
 			// (pre-log data, benchmark stores) keep legacy behavior.
+			// The two gates use different bars on purpose. Promotion asks for
+			// real rehearsal (>=3 days) because withholding it costs nothing.
+			// The prune asks only for a second day, because being demoted to
+			// dormant removes a memory from search and context entirely, so a
+			// false positive destroys knowledge while a false negative merely
+			// leaves a passenger for the ranking layer (GHOST_UTILITY_WEIGHT)
+			// to deprioritize. Observed on a live store 2026-07-28: ort-cli
+			// (284 accesses, utility 1, 2 distinct access days) was pruned and
+			// became unreachable — an exact phrase from its own content could
+			// not retrieve it. 1,865 memories with 100+ accesses had collected
+			// in dormant, and none of them had >=3 access days, so the old bar
+			// was the whole difference.
 			if days, logged := spacedDays[m.ID]; logged {
 				if rule.ID == "sys-promote-to-ltm" && days < 3 {
 					continue
 				}
-				if rule.ID == "sys-prune-low-utility" && (days >= 3 || ageHours < 72) {
+				if rule.ID == "sys-prune-low-utility" && (days >= 2 || ageHours < 72) {
 					continue
 				}
 			}
