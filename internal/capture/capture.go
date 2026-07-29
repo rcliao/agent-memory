@@ -348,7 +348,13 @@ func containsCJKRune(s string) bool {
 }
 
 // mediaPlaceholderRe matches transport-layer media placeholder segments.
-var mediaPlaceholderRe = regexp.MustCompile(`^\((?:sticker|photo|video|voice(?:\s+message)?|file|document|audio)\)`)
+// mediaPlaceholderRe matches the bridge's media metadata lines. The media
+// word may be followed by qualifiers before the closing paren — the bridge
+// began emitting "(sticker from <Name> (nickname))" and the old form, which
+// required ")" immediately after the word, let a previously-fixed FP class
+// back in (live regression 2026-07-29). Anchored at the start and bounded to
+// one line so it cannot swallow prose that merely opens with a paren.
+var mediaPlaceholderRe = regexp.MustCompile(`^\((?:sticker|photo|video|voice(?:\s+message)?|file|document|audio)\b[^)\n]*\)?`)
 
 // bareURLRe matches a line that is nothing but a single URL.
 var bareURLRe = regexp.MustCompile(`^https?://\S+$`)

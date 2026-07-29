@@ -120,6 +120,12 @@ var chatterCorpus = []string{
 	"(sticker) [emoji: 👀, set: Eeveelotions]",
 	"(sticker) [video sticker] [emoji: 😎, set: Capoo_Video2]",
 	"(photo)",
+	// Sender-qualified media placeholders (live regression 2026-07-29): the
+	// bridge began emitting "(sticker from <Name> (nick))" and the old
+	// anchored form only matched a paren immediately after the media word,
+	// so a previously-fixed class came back.
+	"(sticker from Nova (mami / 媽媽)) [emoji: 👀, set: Eeveelotions]",
+	"(photo from Alex) [caption: none]",
 	"(voice message) [duration: 12s]",
 	// Entity-bearing pure questions (4 live FPs): asking ABOUT something is
 	// not a fact about the asker. First-person plan-stating questions still
