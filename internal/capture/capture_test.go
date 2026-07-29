@@ -223,3 +223,29 @@ func TestAddressedGuardKeepsCuedFacts(t *testing.T) {
 		t.Errorf("meta-conversation still captured")
 	}
 }
+
+// The widened media-placeholder guard must not swallow prose that merely
+// opens with a parenthesis, or mention a media word mid-sentence.
+func TestMediaGuardDoesNotEatProse(t *testing.T) {
+	keep := []string{
+		"(actually I prefer the front camera, not the garage one)",
+		"我對芹菜過敏，煮菜的時候不要放。",
+		"Actually the photo I sent earlier was the wrong one, use the newer sticker set instead.",
+	}
+	for _, s := range keep {
+		if len(Extract(s, Options{})) == 0 {
+			t.Errorf("media guard swallowed prose: %q", s)
+		}
+	}
+	drop := []string{
+		"(sticker from Nova (mami / 媽媽)) [emoji: 👀, set: Eeveelotions]",
+		"(photo from Alex) [caption: none]",
+		"(sticker) [emoji: 😎, set: Capoo]",
+		"(voice message) [duration: 12s]",
+	}
+	for _, s := range drop {
+		if n := len(Extract(s, Options{})); n != 0 {
+			t.Errorf("media placeholder still captured (%d candidates): %q", n, s)
+		}
+	}
+}
