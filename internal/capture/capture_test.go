@@ -249,3 +249,29 @@ func TestMediaGuardDoesNotEatProse(t *testing.T) {
 		}
 	}
 }
+
+// The question-safe cue re-grading must only affect QUESTIONS. Statements
+// that genuinely lead with "Actually" or "Then" keep their cues, and a
+// question with independent evidence still captures.
+func TestQuestionSafeCuesScope(t *testing.T) {
+	keep := []string{
+		"Actually, the appointment is on Wednesday, not Tuesday.", // statement correction
+		"Then run make dev to restart the daemon.",                // statement procedural
+		"所以我們下個月到機場之後，就直接搭Metro Line去飯店嗎?",                       // question + first-person plan
+		"Actually I'm allergic to lemongrass, so skip the curry paste?",
+	}
+	for _, s := range keep {
+		if len(Extract(s, Options{})) == 0 {
+			t.Errorf("question-safe re-grading swallowed a real capture: %q", s)
+		}
+	}
+	drop := []string{
+		"does the Neck fan actually works?",
+		"then what really works?",
+	}
+	for _, s := range drop {
+		if n := len(Extract(s, Options{})); n != 0 {
+			t.Errorf("cue-misfire question still captured (%d): %q", n, s)
+		}
+	}
+}

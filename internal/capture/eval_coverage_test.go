@@ -134,6 +134,12 @@ var chatterCorpus = []string{
 	"你們知道Paze嗎？是不是像Venmo？",
 	"為什麼換Nova不見了？",
 	"Why does the Rivelo EV make engine noise while charging?",
+	// Cue misfires that rescued a question (2 live FPs 2026-07-29): bare
+	// "actually" is an intensifier here, not a correction, and a leading
+	// "then" is a discourse connective, not a procedural step. A pure
+	// question with no first-person stake must not survive on those alone.
+	"does the Neck fan actually works?",
+	"then what really works?",
 	// Enumeration lines under a question (2 live FPs, 2026-07-19): a list
 	// supporting a question ("can he still eat X? he had A, B, C today")
 	// is the question's context — subject-less, so a standalone memory

@@ -143,7 +143,7 @@ func Extract(text string, opts Options) []Candidate {
 		// about the asker ("你們知道Paze嗎？" made Paze a "memory" — 4 live
 		// FPs). A question still captures when an intent cue fired or when it
 		// states the asker's own plan (first-person marker present).
-		if len(cues) == 0 && isPureQuestion(prose) && !hasFirstPerson(prose) {
+		if len(questionSafeCues(prose, cues)) == 0 && isPureQuestion(prose) && !hasFirstPerson(prose) {
 			continue
 		}
 		// Enumeration under a leading question (see leadIsQuestion above).
@@ -471,6 +471,27 @@ func isPureQuestion(s string) bool {
 		}
 	}
 	return false
+}
+
+// weakInQuestionRe matches triggers that carry intent in a STATEMENT but not
+// in a question: bare "actually"/"really" are intensifiers ("does it actually
+// work?"), and a leading discourse connective is not a procedural step ("then
+// what really works?"). Both fired cues that rescued pure questions past the
+// interrogative guard — 2 live FPs 2026-07-29.
+var weakInQuestionRe = regexp.MustCompile(`(?i)\b(?:actually|really)\b|^\s*(?:then|first|next)\b`)
+
+// questionSafeCues re-grades a segment with question-ambiguous triggers
+// masked, so only cues with independent evidence can rescue a question.
+// Statements are unaffected — this is consulted solely by the question guard.
+func questionSafeCues(prose string, cues []string) []string {
+	if len(cues) == 0 {
+		return cues
+	}
+	masked := weakInQuestionRe.ReplaceAllString(prose, " ")
+	if masked == prose {
+		return cues
+	}
+	return classify(masked)
 }
 
 // taskRequestRe matches "do this for me" commands aimed at the agent
