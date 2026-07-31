@@ -275,3 +275,26 @@ func TestQuestionSafeCuesScope(t *testing.T) {
 		}
 	}
 }
+
+// A name butted against a request is address; a PERSON doing something for
+// the speaker is a fact and must survive.
+func TestAddressedGuardNameButtedRequest(t *testing.T) {
+	drop := []string{
+		"Nova幫我加上Pike Place Chowder",
+		"皮卡你幫我看如果要去Bainbridge是在哪裡搭船",
+	}
+	for _, s := range drop {
+		if n := len(Extract(s, Options{})); n != 0 {
+			t.Errorf("agent-directed request still captured (%d): %q", n, s)
+		}
+	}
+	keep := []string{
+		"媽媽幫我買了止痛藥，我今天頭有點痛",   // health cue — a fact, not a request
+		"Nova make sure to update the reading list.", // English subject position
+	}
+	for _, s := range keep {
+		if len(Extract(s, Options{})) == 0 {
+			t.Errorf("address guard swallowed a real fact: %q", s)
+		}
+	}
+}
