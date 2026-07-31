@@ -78,6 +78,9 @@ var coverageCorpus = []coverageCase{
 	// eat beef" is 18 bytes, under the English-tuned 20-byte segment
 	// floor, and negated habits (我們不+verb) had no cue.
 	{text: "我們不吃牛喔", class: "zh-fact"},
+	// "<person>幫我<verb>了" is a FACT about what someone did, not a request
+	// to an agent — the address guard must not swallow it.
+	{text: "媽媽幫我做了草莓蛋糕，冰在冰箱第二層", class: "zh-fact", gap: true},
 	{text: "我不吃香菜，拜託記得。", class: "zh-preference"},
 	// Health events — two live misses in two days (2026-07-14/15; a minor
 	// kitchen cut, a post-meal upset treated with a named remedy). The premium
@@ -175,6 +178,12 @@ var chatterCorpus = []string{
 	"可以幫我找找Solaris牌有沒有20cm左右的不鏽鋼平底鍋嗎",
 	"幫我查一下Northwind簽證要準備哪些文件",
 	"還是你們再幫我確認Solaris是不是真的台灣製",
+	// Name butted directly against the request, no comma or pronoun (2 live
+	// FPs 2026-07-31, both agents): the task-request guard anchored 幫我 near
+	// the start and the address guard wanted a pronoun/comma, so a bare
+	// "<Name>幫我…" walked between them.
+	"Nova幫我加上Pike Place Chowder",
+	"皮卡你幫我看如果要去Bainbridge是在哪裡搭船",
 	// Question + link (2 live FPs, 2026-07-19): percent-encoded URLs fire
 	// the numeric fact cue (%E4… matches digit+%), and URL innards mint
 	// entities — cue and entity gates must grade the PROSE, not the link.

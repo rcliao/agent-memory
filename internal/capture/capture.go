@@ -393,7 +393,7 @@ func countNonVocative(seg string, ents []entity.Entity) int {
 // 圖片是…") or set off by a comma before CJK prose ("Nova，剛剛那張…"). The
 // leading name is often invisible to the NER (sentence-initial capitals are
 // discounted), so this is a pattern check rather than an entity check.
-var addressedRe = regexp.MustCompile(`^[A-Z][A-Za-z]{1,15}(?:[你妳]|[，,]\s*\p{Han})`)
+var addressedRe = regexp.MustCompile(`^[A-Z][A-Za-z]{1,15}(?:[你妳]|幫我|替我|[，,]\s*\p{Han})|^\p{Han}{2,4}[你妳]`)
 
 // addressedToAgent reports meta-conversation aimed at the listener — about
 // what the agent just did, not about the world. A real fact told to an agent
