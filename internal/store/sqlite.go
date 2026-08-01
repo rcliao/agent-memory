@@ -34,6 +34,7 @@ type SQLiteStore struct {
 	contractReadOnly bool
 	reranker embedding.Reranker
 	rerankErrOnce sync.Once // one-shot warn when the reranker fails (see rerankMaxP)
+	pinOverflowWarned sync.Map // ns -> bool, one-shot warn when pinned exceeds the pin budget
 	nowFn    func() time.Time // injectable clock; nil means time.Now
 }
 
