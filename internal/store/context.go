@@ -128,6 +128,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			pinBudget = budget / 2
 		}
 
+		pinDropped := 0
 		pinned, err := s.loadPinnedMemories(ctx, p.NS)
 		if err != nil {
 			return nil, fmt.Errorf("load pinned tiers: %w", err)
@@ -151,6 +152,24 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 				})
 				usedTokens += memTokens
 				seen[m.ID] = true
+			} else {
+				pinDropped++
+			}
+		}
+		// "Pinned" reads as a guarantee — the caller marked these
+		// always-load. It is not: pinned competes for a sub-budget
+		// (default budget/2), ordered by importance, and the overflow is
+		// silently discarded every turn. Measured on two production stores
+		// 2026-08-01: 29 pinned / 4915 tokens with only 7 admitted (24%),
+		// and 17 / 3372 with 5 admitted (29%) — including a food-allergy
+		// memory the household had pinned precisely so it would always be
+		// present. Warn once per namespace so an oversubscribed pin set is
+		// visible instead of being discovered by a wrong answer.
+		if pinDropped > 0 {
+			if _, warned := s.pinOverflowWarned.LoadOrStore(p.NS, true); !warned {
+				fmt.Fprintf(os.Stderr,
+					"ghost: pinned set exceeds pin budget for %s — %d of %d pinned memories dropped (pin budget %d tokens). Raise PinBudget/Budget or reduce the pinned set; lowest-importance pins are never loaded.\n",
+					p.NS, pinDropped, pinDropped+len(result.Memories), pinBudget)
 			}
 		}
 	}
