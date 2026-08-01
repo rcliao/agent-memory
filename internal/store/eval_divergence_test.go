@@ -35,9 +35,15 @@ import (
 //	GHOST_DIVERGENCE_PROBES=/path/probes.json \
 //	GHOST_EMBED_PROVIDER=local go test ./internal/store/ -run TestEvalCrossAgentDivergence -v
 //
-// Set GHOST_DIVERGENCE_EXCLUDE_PINNED=1 to measure the similarity-retrieved
-// delta alone; the default includes pinned, matching how production assembles
-// context (pinned snapshot + per-turn delta).
+// The probe mirrors how shell actually assembles an agent's view, which is
+// NOT a single Context() call: the pinned set is listed UNBOUNDED into the
+// system prompt (no token budget, no importance cut), and Context() then runs
+// with ExcludePinned to add the per-turn delta. Assembling both here matters —
+// scoring a plain Context() call instead makes pinned facts look missing when
+// production would have had them, which is exactly the false alarm this
+// comment exists to prevent. Set GHOST_DIVERGENCE_EXCLUDE_PINNED=1 to score
+// the retrieved delta ALONE, i.e. to ask what the agent could recall if it
+// were not already carrying the fact in its prompt.
 //
 // probes.json: [{"q":"question text","expect":"substring that proves recall","class":"safety|household|..."}]
 type divergenceProbe struct {
@@ -91,12 +97,23 @@ func TestEvalCrossAgentDivergence(t *testing.T) {
 	for _, p := range probes {
 		var knows []string
 		for _, a := range agents {
+			var joined strings.Builder
+			deltaOnly := os.Getenv("GHOST_DIVERGENCE_EXCLUDE_PINNED") == "1"
+			if !deltaOnly {
+				pins, err := a.store.List(ctx, ListParams{NS: a.ns, PinnedOnly: true, Limit: 500})
+				if err != nil {
+					t.Fatalf("%s pinned list: %v", a.name, err)
+				}
+				for _, m := range pins {
+					joined.WriteString(m.Content)
+					joined.WriteString("\n")
+				}
+			}
 			res, err := a.store.Context(ctx, ContextParams{NS: a.ns, Query: p.Q,
-				Budget: 2000, MinScore: 0.3, ExcludePinned: os.Getenv("GHOST_DIVERGENCE_EXCLUDE_PINNED") == "1"})
+				Budget: 2000, MinScore: 0.3, ExcludePinned: true})
 			if err != nil {
 				t.Fatalf("%s context %q: %v", a.name, p.Q, err)
 			}
-			var joined strings.Builder
 			for _, m := range res.Memories {
 				joined.WriteString(m.Content)
 				joined.WriteString("\n")
