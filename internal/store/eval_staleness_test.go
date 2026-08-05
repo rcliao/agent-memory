@@ -619,3 +619,71 @@ func containsAny(haystack string, needles []string) bool {
 	}
 	return false
 }
+
+// TestEvalStalenessEdgeRescue asks the decisive design question: given the
+// failure is OMISSION (the correction loses to its own topical siblings while
+// the pinned stale value rides in free), does ghost already have the machinery
+// to fix it — or do we need new scoring?
+//
+// The hypothesis: the stale memory is retrieved on every turn, so it is a
+// reliable SEED. A `contradicts` edge from it to the correction means edge
+// expansion drags the correction in, and contradicts force-includes —
+// bypassing the propagated-score cap that would otherwise budget it out
+// (context.go). If that holds, nothing needs a new score term. The only thing
+// missing is that the edge does not exist, because contradicts is minted only
+// by same-key supersede.
+//
+// Run at the operating point where the failure reproduces:
+//
+//	GHOST_STALE_SIBLINGS=8 GHOST_EMBED_PROVIDER=local \
+//	  go test ./internal/store/ -run TestEvalStalenessEdgeRescue -v
+func TestEvalStalenessEdgeRescue(t *testing.T) {
+	ctx := context.Background()
+	for _, budget := range []int{400, 300, 200} {
+		var withoutEdge, withEdge int
+		for _, c := range staleCorpus() {
+			for _, linked := range []bool{false, true} {
+				s := newTestStore(t)
+				base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+				s.SetClock(func() time.Time { return base })
+				if _, err := s.Put(ctx, PutParams{NS: "agent:eval", Key: c.staleKey, Content: c.staleContent,
+					Kind: "semantic", Tier: "ltm", Pinned: c.pinnedStale, Importance: 0.6}); err != nil {
+					t.Fatal(err)
+				}
+				later := base.AddDate(0, 0, 21)
+				s.SetClock(func() time.Time { return later })
+				if _, err := s.Put(ctx, PutParams{NS: "agent:eval", Key: c.freshKey, Content: c.freshContent,
+					Kind: "semantic", Tier: "ltm", Importance: 0.6}); err != nil {
+					t.Fatal(err)
+				}
+				seedDistractors(ctx, s, staleScale())
+				seedSiblings(ctx, s, c, staleSiblings(), later)
+				if linked {
+					// The edge cross-key supersession would create: the
+					// correction refutes the stale fact.
+					if _, err := s.CreateEdge(ctx, EdgeParams{
+						FromNS: "agent:eval", FromKey: c.freshKey,
+						ToNS: "agent:eval", ToKey: c.staleKey, Rel: "contradicts",
+					}); err != nil {
+						t.Fatal(err)
+					}
+				}
+				s.SetClock(func() time.Time { return later.AddDate(0, 0, 1) })
+
+				res, err := s.Context(ctx, ContextParams{NS: "agent:eval", Query: c.query, Budget: budget})
+				if err != nil {
+					t.Fatal(err)
+				}
+				present := strings.Contains(renderContext(res, renderBare, nil, caseDates(c)), c.freshMarker)
+				if linked && present {
+					withEdge++
+				} else if !linked && present {
+					withoutEdge++
+				}
+			}
+		}
+		n := len(staleCorpus())
+		t.Logf("budget=%-5d correction reaches context:  no edge %d/%d  ->  with contradicts edge %d/%d",
+			budget, withoutEdge, n, withEdge, n)
+	}
+}

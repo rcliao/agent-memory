@@ -64,7 +64,22 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	// busy_timeout: the daemon, CLI, and MCP server write the same DB —
 	// without a wait, a concurrent writer gets an instant SQLITE_BUSY
 	// (observed as "consolidate exchanges failed ... database is locked").
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)&_pragma=busy_timeout(5000)")
+	//
+	// _txlock=immediate: busy_timeout alone was NOT enough. Every write path
+	// here uses BeginTx(ctx, nil), which SQLite begins DEFERRED — the write
+	// lock is taken lazily, on the first write statement. A transaction that
+	// reads first and writes second therefore has to UPGRADE, and if another
+	// writer committed in between, SQLite fails that upgrade with an instant
+	// SQLITE_BUSY that busy_timeout does not retry (retrying could not
+	// preserve the snapshot the transaction already read from). Taking the
+	// write lock up front makes the wait apply, which is what busy_timeout
+	// was there for in the first place.
+	//
+	// Measured on the two live daemon stores 2026-08-05: 22 swallowed write
+	// failures — 6 thread summaries, 6 exchange logs, 3 distilled same-day
+	// facts, plus scheduler and media-note writes. Each was logged at WARN
+	// and dropped, so the memory simply never existed.
+	db, err := sql.Open("sqlite", dbPath+"?_txlock=immediate&_pragma=journal_mode(wal)&_pragma=foreign_keys(on)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
