@@ -567,9 +567,9 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 				break
 			}
 
-			neighborID := edge.ToID
-			if neighborID == seed.id {
-				continue // self-loop guard
+			neighborID, followable := neighborForSeed(edge, seed.id)
+			if !followable {
+				continue // self-loop, or the relation does not travel this way
 			}
 
 			// Skip if this neighbor is a pinned memory already in context
