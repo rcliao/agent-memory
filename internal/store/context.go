@@ -103,6 +103,11 @@ type ContextResult struct {
 type contextCandidate struct {
 	memory model.Memory
 	score  float64
+	// refutes marks a candidate that reached the pool through a `contradicts`
+	// edge — something in context is refuted by this memory. Tracked so packing
+	// can reserve room for it rather than letting it be squeezed out by the
+	// very neighbours that made the conflict hard to see.
+	refutes bool
 	// relevance is the topical-match strength that fed the composite score: a
 	// real cosine for vector-sourced candidates, a graded term overlap for
 	// FTS/LIKE ones, 0 for edge-expanded arrivals. Kept so the MinScore floor
@@ -394,6 +399,43 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		candidates = mmrRerank(candidates, lambda)
 	}
 
+	// Reserve room for refutations before greedy packing takes over.
+	//
+	// `contradicts` already bypasses the propagated-score CAP, which is enough
+	// to make a refutation a strong candidate — but not enough to make it a
+	// PRESENT one. Scoring and packing are separate steps, and the refutation
+	// still had to win a token slot against the same near-duplicate siblings
+	// that buried it in the first place. Measured: pull-through worked at a
+	// 700-token budget and vanished entirely at 400 and below, which is exactly
+	// the regime where a correction matters most and the one the staleness
+	// harness reproduces.
+	//
+	// Hoisting is bounded on purpose. A refutation storm must not become its
+	// own denial of service, so refuters may claim at most a third of the
+	// budget; past that they fall back into ordinary score order. Rare by
+	// nature — `contradicts` edges are curated or supersede-minted, never
+	// auto-linked — so in practice this moves one or two memories.
+	if len(candidates) > 1 {
+		reserve := (budget - usedTokens) / 3
+		var refuters, rest []contextCandidate
+		claimed := 0
+		for _, c := range candidates {
+			tok := c.memory.EstTokens
+			if tok <= 0 {
+				tok = (len(c.memory.Content) / 4) + 20
+			}
+			if c.refutes && claimed+tok <= reserve {
+				refuters = append(refuters, c)
+				claimed += tok
+				continue
+			}
+			rest = append(rest, c)
+		}
+		if len(refuters) > 0 {
+			candidates = append(refuters, rest...)
+		}
+	}
+
 	// Packing substitution (LCM compression under pressure, the redesign's
 	// lossless move): when 3+ candidates share a contains-parent and the
 	// full candidate set overflows the budget, the parent substitutes for
@@ -606,6 +648,11 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 				}
 			}
 
+			if isContradiction {
+				if existing, ok := scoreMap[neighborID]; ok {
+					existing.refutes = true
+				}
+			}
 			if existing, ok := scoreMap[neighborID]; ok {
 				// Memory already in pool — additive boost, capped
 				origScore := originalScores[neighborID]
@@ -638,7 +685,7 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 				if !isContradiction && propagated > 0.3 {
 					propagated = 0.3
 				}
-				scoreMap[neighborID] = &contextCandidate{memory: *m, score: propagated}
+				scoreMap[neighborID] = &contextCandidate{memory: *m, score: propagated, refutes: isContradiction}
 				originalScores[neighborID] = 0 // no direct score
 				totalExpanded++
 			}
