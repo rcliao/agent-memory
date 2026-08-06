@@ -110,3 +110,10 @@ func neighborForSeed(e Edge, seedID string) (neighborID string, ok bool) {
 	}
 	return "", false
 }
+
+// expansionSeed is a starting point for spreading activation: a memory ID and
+// the score its neighbours' propagation is scaled from.
+type expansionSeed struct {
+	id    string
+	score float64
+}

@@ -1,6 +1,10 @@
 package store
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"testing"
+)
 
 // The policy table is the whole reason expansion rules live in Go rather than
 // SQL: it can be asserted directly, without a database.
@@ -59,5 +63,75 @@ func TestExpansionPriorityBeatsSimilarityWeight(t *testing.T) {
 	}
 	if expansionDirectionsFor("merged_into").Outgoing || expansionDirectionsFor("merged_into").Incoming {
 		t.Error("merged_into is an audit trail and must never be traversed")
+	}
+}
+
+// A pinned memory is in context every turn, so it is the most reliable seed
+// the graph has — but Phase 1 appends pinned memories straight to the result
+// and marks them seen, so they never entered scoreMap and could pull in
+// nothing. This is the live shape that mattered: a household safety fact is
+// pinned, a later correction refutes it, and the correction has to arrive.
+func TestPinnedMemorySeedsExpansion(t *testing.T) {
+	ctx := context.Background()
+	build := func(link bool) *ContextResult {
+		s := newTestStore(t)
+		if _, err := s.Put(ctx, PutParams{NS: "agent:pin", Key: "stale",
+			Content: "The garden gate latch sticks, so it is left unlocked overnight.",
+			Kind:    "semantic", Tier: "ltm", Pinned: true, Importance: 0.9}); err != nil {
+			t.Fatal(err)
+		}
+		// Phrased so search cannot find it from the query — only the edge can.
+		if _, err := s.Put(ctx, PutParams{NS: "agent:pin", Key: "correction",
+			Content: "The June work order from the hardware contractor was completed and signed off on the 14th, and nothing on that list is outstanding.",
+			Kind:    "semantic", Tier: "ltm", Importance: 0.5}); err != nil {
+			t.Fatal(err)
+		}
+		// Filler closer to the query than the correction is, so the correction
+		// cannot win a slot on similarity. Without this the control arm passes
+		// on its own and the test proves nothing — which is exactly what the
+		// first version of it did.
+		for i := 0; i < 8; i++ {
+			_, _ = s.Put(ctx, PutParams{NS: "agent:pin", Key: fmt.Sprintf("gate-note-%d", i),
+				Content: fmt.Sprintf("Note %d: the garden gate was checked and left as it was, no change to the latch or the lock.", i),
+				Kind:    "semantic", Tier: "ltm", Importance: 0.6})
+		}
+		if link {
+			if _, err := s.CreateEdge(ctx, EdgeParams{FromNS: "agent:pin", FromKey: "correction",
+				ToNS: "agent:pin", ToKey: "stale", Rel: "contradicts"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		res, err := s.Context(ctx, ContextParams{NS: "agent:pin", Query: "is the garden gate left unlocked", Budget: 600})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	has := func(res *ContextResult, key string) bool {
+		for _, m := range res.Memories {
+			if m.Key == key {
+				return true
+			}
+		}
+		return false
+	}
+
+	linked, unlinked := build(true), build(false)
+	if !has(linked, "correction") {
+		t.Error("a contradicts edge from a pinned memory did not pull the correction into context")
+	}
+	if has(unlinked, "correction") {
+		t.Error("control arm is broken: the correction arrives without an edge, so this test proves nothing")
+	}
+	// Seeding must not turn the pinned memory into a candidate as well.
+	var count int
+	for _, m := range linked.Memories {
+		if m.Key == "stale" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("pinned memory appears %d times in context, want exactly 1", count)
 	}
 }
