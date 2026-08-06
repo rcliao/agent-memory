@@ -41,7 +41,17 @@ import (
 //     contradicts edge could not rescue a buried correction, and why no
 //     production edge has ever been observed to change an assembly.
 //
-//  2. PINNED SEEDS ARE GRAPH-INERT. Pinned memories are appended straight to
+//  2b. NON-CONTRADICTS EDGES ARE INERT FOR CANDIDATES ALREADY IN THE POOL.
+//     Measured once rank delta replaced presence: refines, depends_on,
+//     caused_by and prevents all sit at IDENTICAL rank with and without their
+//     edge. For a neighbour already retrieved by search, the boost is capped at
+//     origScore * MaxBoostFactor (0.5, floor 0.15) — too small to reorder
+//     anything. Only `contradicts` bypasses that cap and carries a score floor
+//     of 0.8 * seed, which is why it is the only relation that visibly moves
+//     the result. Presence alone had hidden this: both arms said "present" and
+//     it read as a corpus limitation rather than an inert mechanism.
+//
+//  3. PINNED SEEDS WERE GRAPH-INERT. Pinned memories are appended straight to
 //     the result in Phase 1 and never enter scoreMap, which is the seed set
 //     for expansion — so the one memory guaranteed to be present every turn
 //     can pull in nothing. The pinned case here fails even in the working
@@ -62,56 +72,63 @@ type graphCase struct {
 }
 
 func graphCorpus() []graphCase {
-	// Neighbours are deliberately phrased with MINIMAL lexical and topical
-	// overlap with the query. The first version of this corpus failed as an
-	// instrument: every neighbour was an obvious paraphrase of the seed, so it
-	// arrived on similarity in all six cases and the edge could not be
-	// observed either way. Edges exist to pull in what similarity MISSES, so
-	// the neighbour has to be something retrieval would not find on its own.
+	// Every neighbour here is UNREACHABLE from the query by similarity — that
+	// is the only condition under which an edge is observable. A neighbour
+	// that a plain search would find scores the same in both arms and tells us
+	// nothing, which is what happened on the first two versions of this
+	// corpus: four of six relations read "arrived anyway" and the eval could
+	// not distinguish a working relation from a broken one.
+	//
+	// Consequence worth stating: these neighbours are not textbook instances
+	// of their relation. A refinement of "backups run nightly" would naturally
+	// be about timing, and timing is what the query asks for — so it would be
+	// found anyway. What is under test is whether the RELATION TRAVERSES, not
+	// whether the content is a canonical example of it. The relation label is
+	// the variable; the content is chosen to make the label measurable.
 	return []graphCase{
 		{
 			rel:              "contradicts",
 			seedContent:      "The office badge reader on the third floor accepts the old blue cards.",
-			neighbourContent: "Facilities swapped the entry hardware in July. Anything issued before that month is now rejected at the turnstile.",
+			neighbourContent: "Facilities swapped that unit out in July and anything issued before then is refused now.",
 			query:            "which badge works on the third floor reader",
-			neighbourMarker:  "swapped the entry hardware",
+			neighbourMarker:  "swapped that unit out",
 		},
 		{
 			rel:              "refines",
 			seedContent:      "Backups run nightly.",
-			neighbourContent: "The window is 02:15 UTC to roughly 02:55, and read-only volumes are skipped entirely.",
+			neighbourContent: "Restores have to be requested through the ops desk and typically take an hour to prepare.",
 			query:            "when do the backups run",
-			neighbourMarker:  "02:15 UTC to roughly 02:55",
+			neighbourMarker:  "requested through the ops desk",
 		},
 		{
 			rel:              "depends_on",
 			seedContent:      "Deploying the reporting service requires the migration step to have completed.",
-			neighbourContent: "The ops runbook task named migrate-reports must finish first; it is not part of the pipeline and someone has to trigger it.",
+			neighbourContent: "Nobody has automated the migrate-reports task; someone still triggers it by hand each time.",
 			query:            "how do I deploy the reporting service",
-			neighbourMarker:  "migrate-reports",
+			neighbourMarker:  "triggers it by hand",
 		},
 		{
 			rel:              "caused_by",
 			seedContent:      "The dashboard was slow all Tuesday afternoon.",
-			neighbourContent: "Finance moved the quarterly export to run at noon, and it holds most of the connection pool while it works.",
+			neighbourContent: "Finance moved their quarterly export to noon and it holds most of the pool while it works.",
 			query:            "why was the dashboard slow on Tuesday",
-			neighbourMarker:  "Finance moved the quarterly export",
+			neighbourMarker:  "moved their quarterly export",
 		},
 		{
 			rel:              "prevents",
 			seedContent:      "Never ship a release on a Friday afternoon.",
-			neighbourContent: "The on-call rotation hands over at 17:00 and the incoming engineer starts with no context on anything shipped that day.",
+			neighbourContent: "Handover happens at 17:00 and whoever picks up the pager has no idea what went out that day.",
 			query:            "can we release on Friday",
-			neighbourMarker:  "hands over at 17:00",
+			neighbourMarker:  "picks up the pager",
 		},
 		{
-			// The production shape: the seed is pinned, so it never enters the
-			// search result set and therefore never seeds expansion.
+			// The production shape: the seed is pinned, so before #94 it never
+			// entered the search result set and could not seed expansion.
 			rel:              "contradicts",
 			seedContent:      "The kitchen coffee machine takes the tall paper cups from the cupboard.",
-			neighbourContent: "The unit was replaced in the spring; the new one has a lower clearance and anything over 12cm overflows.",
+			neighbourContent: "That unit was replaced in the spring and the new one has much less clearance underneath.",
 			query:            "which cups fit the kitchen coffee machine",
-			neighbourMarker:  "lower clearance",
+			neighbourMarker:  "much less clearance",
 			seedPinned:       true,
 		},
 	}
@@ -188,12 +205,27 @@ func renderKeys(res *ContextResult) string {
 }
 
 func hasMarker(res *ContextResult, marker string) bool {
-	for _, m := range res.Memories {
+	return markerRank(res, marker) >= 0
+}
+
+// markerRank returns the neighbour's 0-based position in the assembled
+// context, or -1 if absent.
+//
+// Presence alone turned out to be too blunt a metric. For four of six
+// relations the neighbour is a DIRECT search hit however it is worded — with
+// embeddings enabled, semantically related text stays reachable — so both arms
+// reported "present" and the edge could be neither credited nor blamed. Rank
+// still moves in those cases: an edge that contributes propagated score should
+// lift the neighbour, and one that contributes nothing should not. Rank makes
+// the four unmeasurable relations measurable without contorting the corpus
+// into content nobody would ever write.
+func markerRank(res *ContextResult, marker string) int {
+	for i, m := range res.Memories {
 		if strings.Contains(m.Content, marker) {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
 }
 
 // TestEvalGraphPullThrough reports, per relation type, whether the edge
@@ -214,17 +246,25 @@ func TestEvalGraphPullThrough(t *testing.T) {
 			withEdge: hasMarker(with, c.neighbourMarker), withoutEdge: hasMarker(without, c.neighbourMarker)}
 		rows = append(rows, r)
 
+		rankWith, rankWithout := markerRank(with, c.neighbourMarker), markerRank(without, c.neighbourMarker)
 		verdict := "NO EFFECT"
 		switch {
 		case r.withEdge && !r.withoutEdge:
 			verdict = "PULLED THROUGH (edge is why)"
-		case r.withEdge && r.withoutEdge:
-			verdict = "arrived anyway (similarity, not the edge)"
 		case !r.withEdge && r.withoutEdge:
 			verdict = "REGRESSION (edge pushed it out)"
+		case r.withEdge && r.withoutEdge:
+			switch {
+			case rankWith < rankWithout:
+				verdict = fmt.Sprintf("RANK LIFTED %d -> %d (edge helped)", rankWithout, rankWith)
+			case rankWith > rankWithout:
+				verdict = fmt.Sprintf("RANK DROPPED %d -> %d", rankWithout, rankWith)
+			default:
+				verdict = fmt.Sprintf("present in both at rank %d, edge changed nothing", rankWith)
+			}
 		}
-		t.Logf("%-12s pinned_seed=%-5v  with_edge=%-5v without_edge=%-5v  -> %s",
-			r.rel, r.pinned, r.withEdge, r.withoutEdge, verdict)
+		t.Logf("%-12s pinned=%-5v  present(with/without)=%v/%v  rank=%d/%d  -> %s",
+			r.rel, r.pinned, r.withEdge, r.withoutEdge, rankWith, rankWithout, verdict)
 		t.Logf("      keys(with)=%s", renderKeys(with))
 	}
 
@@ -234,7 +274,8 @@ func TestEvalGraphPullThrough(t *testing.T) {
 			effective++
 		}
 	}
-	t.Logf("\nSUMMARY: %d/%d relations demonstrably changed the assembled context", effective, len(rows))
+	t.Logf("\nSUMMARY: %d/%d relations made an otherwise-unreachable neighbour reachable; "+
+		"see per-row rank deltas for the rest", effective, len(rows))
 	if effective == 0 {
 		t.Log("NOTE: zero relations pulled through — edge expansion is not influencing assembly " +
 			"at this budget. That is a finding about the graph, not about the corpus.")
