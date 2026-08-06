@@ -89,69 +89,69 @@ type staleCase struct {
 func staleCorpus() []staleCase {
 	return []staleCase{
 		{
-			name:        "color-correction",
-			staleKey:    "yard-visitor-profile",
+			name:         "color-correction",
+			staleKey:     "yard-visitor-profile",
 			staleContent: "The stray cat that visits the yard at night is a small BLACK short-haired cat, first noted in June.",
-			freshKey:    "yard-visitor-color-corrected",
+			freshKey:     "yard-visitor-color-corrected",
 			freshContent: "Correction: the yard cat is BLUE-GRAY short-haired with yellow-green eyes, NOT black. It only looked black under the night camera.",
-			staleMarker: "BLACK short-haired", freshMarker: "BLUE-GRAY",
+			staleMarker:  "BLACK short-haired", freshMarker: "BLUE-GRAY",
 			query:       "what colour is the cat that visits the yard",
 			freshAnswer: []string{"blue-gray", "blue gray", "bluish", "gray", "grey"},
 			staleAnswer: []string{"black"},
 			pinnedStale: true,
 		},
 		{
-			name:        "renamed-api",
-			staleKey:    "api-export-endpoint",
+			name:         "renamed-api",
+			staleKey:     "api-export-endpoint",
 			staleContent: "To export a report, call the endpoint /v1/report/export with a POST request.",
-			freshKey:    "api-export-endpoint-renamed",
+			freshKey:     "api-export-endpoint-renamed",
 			freshContent: "The export endpoint was renamed: use /v2/reports:export instead of /v1/report/export, which now returns 410.",
-			staleMarker: "/v1/report/export with a POST", freshMarker: "/v2/reports:export",
+			staleMarker:  "/v1/report/export with a POST", freshMarker: "/v2/reports:export",
 			query:       "which endpoint exports a report",
 			freshAnswer: []string{"/v2/reports:export", "v2"},
 			staleAnswer: []string{"/v1/report/export", "v1"},
 		},
 		{
-			name:        "moved-meeting",
-			staleKey:    "team-sync-schedule",
+			name:         "moved-meeting",
+			staleKey:     "team-sync-schedule",
 			staleContent: "The weekly team sync happens Tuesdays at 10:00 in the small conference room.",
-			freshKey:    "team-sync-moved-thursday",
+			freshKey:     "team-sync-moved-thursday",
 			freshContent: "The weekly team sync moved to Thursdays at 14:00. It is no longer on Tuesday morning.",
-			staleMarker: "Tuesdays at 10:00", freshMarker: "Thursdays at 14:00",
+			staleMarker:  "Tuesdays at 10:00", freshMarker: "Thursdays at 14:00",
 			query:       "when is the weekly team sync",
 			freshAnswer: []string{"thursday"},
 			staleAnswer: []string{"tuesday"},
 		},
 		{
-			name:        "deprecated-flag",
-			staleKey:    "build-flag-usage",
+			name:         "deprecated-flag",
+			staleKey:     "build-flag-usage",
 			staleContent: "Enable the fast path by passing --enable-turbo to the build command.",
-			freshKey:    "build-flag-renamed",
+			freshKey:     "build-flag-renamed",
 			freshContent: "The --enable-turbo flag was removed. The fast path is now on by default and the flag errors out if passed.",
-			staleMarker: "--enable-turbo to the build", freshMarker: "on by default",
+			staleMarker:  "--enable-turbo to the build", freshMarker: "on by default",
 			query:       "how do I turn on the build fast path",
 			freshAnswer: []string{"default", "removed", "no longer"},
 			staleAnswer: []string{"--enable-turbo", "enable-turbo"},
 			pinnedStale: true,
 		},
 		{
-			name:        "changed-preference",
-			staleKey:    "reviewer-preference",
+			name:         "changed-preference",
+			staleKey:     "reviewer-preference",
 			staleContent: "The reviewer prefers pull requests split into many small commits for easier review.",
-			freshKey:    "reviewer-preference-updated",
+			freshKey:     "reviewer-preference-updated",
 			freshContent: "The reviewer now prefers a single squashed commit per pull request; many small commits made bisecting harder.",
-			staleMarker: "many small commits for easier", freshMarker: "single squashed commit",
+			staleMarker:  "many small commits for easier", freshMarker: "single squashed commit",
 			query:       "how should I structure commits in a pull request",
 			freshAnswer: []string{"squash", "single commit", "one commit"},
 			staleAnswer: []string{"many small", "small commits"},
 		},
 		{
-			name:        "relocated-service",
-			staleKey:    "metrics-dashboard-location",
+			name:         "relocated-service",
+			staleKey:     "metrics-dashboard-location",
 			staleContent: "The metrics dashboard lives on the staging host under port 9090.",
-			freshKey:    "metrics-dashboard-relocated",
+			freshKey:     "metrics-dashboard-relocated",
 			freshContent: "The metrics dashboard was relocated to the observability cluster on port 3000; the staging host no longer serves it.",
-			staleMarker: "staging host under port 9090", freshMarker: "observability cluster on port 3000",
+			staleMarker:  "staging host under port 9090", freshMarker: "observability cluster on port 3000",
 			query:       "where is the metrics dashboard hosted",
 			freshAnswer: []string{"observability", "3000"},
 			staleAnswer: []string{"staging", "9090"},
@@ -164,8 +164,8 @@ func staleCorpus() []staleCase {
 type renderMode int
 
 const (
-	renderBare   renderMode = iota // "- <content>", today's shape
-	renderDated                    // "- [<key> | recorded <date>] <content>"
+	renderBare  renderMode = iota // "- <content>", today's shape
+	renderDated                   // "- [<key> | recorded <date>] <content>"
 )
 
 func (r renderMode) String() string {
@@ -489,7 +489,6 @@ func caseDates(c staleCase) map[string]time.Time {
 	}
 }
 
-
 // TestEvalStalenessOmissionProbe locates the failure mode that actually
 // matters. The judged quiz scored 6/6 in both render modes at budget 1200:
 // when both values are present, a capable reader picks the current one and
@@ -518,7 +517,6 @@ func TestEvalStalenessOmissionProbe(t *testing.T) {
 			budget, freshMissing, len(staleCorpus()), staleSurvives)
 	}
 }
-
 
 // staleScale controls how many distractors compete with the correction.
 //
@@ -557,7 +555,6 @@ func seedDistractors(ctx context.Context, s *SQLiteStore, n int) {
 			Kind:    "semantic", Tier: "ltm", Importance: 0.4})
 	}
 }
-
 
 // staleSiblings controls how many SAME-SUBJECT memories compete with the
 // correction. This is the variable that actually reproduces the live failure.
@@ -609,7 +606,6 @@ func min(a, b int) int {
 	}
 	return b
 }
-
 
 func containsAny(haystack string, needles []string) bool {
 	for _, n := range needles {
@@ -685,5 +681,102 @@ func TestEvalStalenessEdgeRescue(t *testing.T) {
 		n := len(staleCorpus())
 		t.Logf("budget=%-5d correction reaches context:  no edge %d/%d  ->  with contradicts edge %d/%d",
 			budget, withoutEdge, n, withEdge, n)
+	}
+}
+
+// TestEvalStalenessConsolidationRescue asks whether collapsing near-duplicate
+// siblings under a `contains` parent lets a buried correction through.
+//
+// This is the lever the omission probe pointed at. Corrections are not lost to
+// noise in general — they are lost to their OWN TOPIC: eight content-free
+// memories about the same subject, each more recent than the correction, take
+// every slot. Consolidation is the one intervention that attacks that directly,
+// and unlike merging it is lossless: children stay recoverable via expand.
+//
+// RESULT (2026-08-06, 8 siblings): consolidation rescues every case, 0/6 ->
+// 6/6. But the budget-matched control rescues them too — handing the baseline
+// the same headroom consolidation frees (540) reaches 6/6 without
+// consolidating anything. So on this corpus the mechanism is TOKEN SPACE, not
+// graph thinning. Consolidation is not doing anything a bigger budget could
+// not.
+//
+// That is worth stating plainly because the flattering reading was available
+// and wrong. Sibling edges DO crowd the graph — auto-linked relates_to edges
+// are cosine-weighted, so near-duplicates sit at 0.95-0.99 and evict typed
+// relations from expansion slots (measured separately in the graph eval) — but
+// that mechanism is not what decides whether the correction arrives here.
+//
+// The production case for consolidation therefore rests on scale, not on this
+// rescue: budget cannot be raised indefinitely, and real stores hold thousands
+// of near-duplicates rather than eight. Without the budget-matched arm this
+// test would have credited consolidation for something the budget did.
+func TestEvalStalenessConsolidationRescue(t *testing.T) {
+	ctx := context.Background()
+	sib := staleSiblings()
+	if sib == 0 {
+		sib = 8 // the level at which the failure reproduces
+	}
+
+	type arm struct {
+		name        string
+		consolidate bool
+		budget      int
+	}
+	// Consolidation does two things at once: it frees tokens (8 rows -> 1) and
+	// it thins the graph (8 cosine-weighted relates_to edges stop competing for
+	// expansion slots). The extra baseline arms hand the SAME token headroom
+	// back without consolidating, so a pure budget explanation is falsifiable.
+	// 8 siblings are roughly 30 tokens each, so +240 covers what consolidation
+	// frees; +600 is deliberate overkill.
+	arms := []arm{
+		{"baseline (siblings intact)", false, 300},
+		{"consolidated", true, 300},
+		{"baseline + freed budget (540)", false, 540},
+		{"baseline + double budget (900)", false, 900},
+	}
+
+	for _, a := range arms {
+		var present, total int
+		for _, c := range staleCorpus() {
+			s := newTestStore(t)
+			base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+			s.SetClock(func() time.Time { return base })
+			if _, err := s.Put(ctx, PutParams{NS: "agent:eval", Key: c.staleKey, Content: c.staleContent,
+				Kind: "semantic", Tier: "ltm", Pinned: c.pinnedStale, Importance: 0.6}); err != nil {
+				t.Fatal(err)
+			}
+			later := base.AddDate(0, 0, 21)
+			s.SetClock(func() time.Time { return later })
+			if _, err := s.Put(ctx, PutParams{NS: "agent:eval", Key: c.freshKey, Content: c.freshContent,
+				Kind: "semantic", Tier: "ltm", Importance: 0.6}); err != nil {
+				t.Fatal(err)
+			}
+			seedSiblings(ctx, s, c, sib, later)
+
+			if a.consolidate {
+				var keys []string
+				for i := 0; i < sib; i++ {
+					keys = append(keys, fmt.Sprintf("%s-sibling-%d", c.freshKey, i))
+				}
+				// Caller-written summary: ghost stays LLM-free.
+				if _, err := s.Consolidate(ctx, ConsolidateParams{NS: "agent:eval",
+					SummaryKey: c.freshKey + "-siblings-rollup",
+					Content:    "Routine follow-ups on this subject through the period: repeatedly observed, nothing changed.",
+					SourceKeys: keys, Kind: "semantic", Importance: 0.5}); err != nil {
+					t.Fatalf("consolidate: %v", err)
+				}
+			}
+			s.SetClock(func() time.Time { return later.AddDate(0, 0, 1) })
+
+			res, err := s.Context(ctx, ContextParams{NS: "agent:eval", Query: c.query, Budget: a.budget})
+			if err != nil {
+				t.Fatal(err)
+			}
+			total++
+			if strings.Contains(renderContext(res, renderBare, nil, caseDates(c)), c.freshMarker) {
+				present++
+			}
+		}
+		t.Logf("%-28s correction reached context in %d/%d cases", a.name, present, total)
 	}
 }
