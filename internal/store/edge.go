@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -243,20 +244,56 @@ func (s *SQLiteStore) GetEdgesByNSKey(ctx context.Context, ns, key string) ([]Ed
 	return s.GetEdges(ctx, id)
 }
 
-// getEdgesForExpansion returns outgoing edges from a memory, filtered by min weight, limited.
+// getEdgesForExpansion returns edges usable as expansion hops from a memory,
+// filtered by min weight and limited.
+//
+// Both directions are fetched; which ones are actually traversable is decided
+// by the per-relation policy in edge_policy.go, not by the query. Keeping that
+// decision in Go rather than SQL is deliberate — it is a table that can be read
+// and unit-tested, and it is why an incoming `contradicts` edge (the direction
+// a correction is naturally written in) is reachable at all. Both from_id and
+// to_id are indexed, and per-seed degree is in the low hundreds at worst, so
+// fetching both sides costs an indexed lookup over tens of rows.
+//
+// The limit is applied AFTER policy filtering, so an unfollowable edge cannot
+// consume a slot that a followable one would have used.
 func (s *SQLiteStore) getEdgesForExpansion(ctx context.Context, memoryID string, minWeight float64, limit int) ([]Edge, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT from_id, to_id, rel, weight, access_count, last_accessed_at, created_at
 		 FROM memory_edges
-		 WHERE from_id = ? AND weight >= ? AND rel != 'merged_into'
-		 ORDER BY weight DESC
-		 LIMIT ?`, memoryID, minWeight, limit)
+		 WHERE (from_id = ? OR to_id = ?) AND weight >= ? AND rel != 'merged_into'
+		 ORDER BY weight DESC`, memoryID, memoryID, minWeight)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	return scanEdges(rows)
+	all, err := scanEdges(rows)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Edge, 0, len(all))
+	for _, e := range all {
+		if _, ok := neighborForSeed(e, memoryID); !ok {
+			continue
+		}
+		out = append(out, e)
+	}
+	// Meaning before similarity: rank by relation priority first, weight only
+	// as a tiebreak within a priority band. Sorting by weight alone let
+	// auto-linked relates_to edges (cosine-weighted, often >0.9) evict typed
+	// relations from every slot.
+	sort.SliceStable(out, func(i, j int) bool {
+		pi, pj := expansionDirectionsFor(out[i].Rel).Priority, expansionDirectionsFor(out[j].Rel).Priority
+		if pi != pj {
+			return pi > pj
+		}
+		return out[i].Weight > out[j].Weight
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func scanEdges(rows *sql.Rows) ([]Edge, error) {
