@@ -120,6 +120,9 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	result := &ContextResult{Budget: budget, Memories: []ContextMemory{}}
 	usedTokens := 0
 	seen := map[string]bool{} // track memory IDs to deduplicate
+	// Pinned memories seed expansion without joining the candidate pool — they
+	// are already in the result, so re-adding them would duplicate.
+	var pinnedSeeds []expansionSeed
 
 	// Phase 1: Load pinned memories first (chronically accessible)
 	if !p.ExcludePinned {
@@ -152,6 +155,18 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 				})
 				usedTokens += memTokens
 				seen[m.ID] = true
+				// A pinned memory is present every single turn, which makes it
+				// the most reliable seed the graph has — and it was the one
+				// candidate that never got to act as one. Phase 1 appends
+				// pinned memories straight to the result and marks them seen;
+				// they never enter scoreMap, which is the seed set for
+				// spreading activation. So the memory guaranteed to be in
+				// context could pull in nothing linked to it, and a correction
+				// pointing at a pinned stale fact stayed unreachable even after
+				// per-relation traversal landed. Measured by
+				// TestEvalGraphPullThrough, where the pinned case failed while
+				// the identical unpinned case passed.
+				pinnedSeeds = append(pinnedSeeds, expansionSeed{id: m.ID, score: m.Importance})
 			} else {
 				pinDropped++
 			}
@@ -281,9 +296,12 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 
 	if edgeCfg.Enabled && len(scoreMap) > 0 {
 		if pprEnabled() {
+			// NOTE: the PPR path does not take pinned seeds. PPR measured
+			// NO-GO as a default and is env-gated, so it is left alone rather
+			// than carrying an unexercised code path.
 			s.expandEdgesPPR(ctx, scoreMap, seen, edgeCfg, now)
 		} else {
-			s.expandEdges(ctx, scoreMap, seen, edgeCfg, now)
+			s.expandEdges(ctx, scoreMap, seen, edgeCfg, now, pinnedSeeds)
 		}
 	}
 
@@ -529,16 +547,15 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 // For each seed, it follows top-K edges and adds neighbor memories to the
 // candidate pool with propagated scores. If a neighbor is already in the pool
 // (direct hit), it gets an additive boost capped by MaxBoostFactor.
-func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*contextCandidate, seen map[string]bool, cfg EdgeExpansionConfig, now time.Time) {
+func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*contextCandidate, seen map[string]bool, cfg EdgeExpansionConfig, now time.Time, extraSeeds []expansionSeed) {
 	// Snapshot seed IDs + scores (don't iterate map while mutating)
-	type seedInfo struct {
-		id    string
-		score float64
-	}
-	var seeds []seedInfo
+	var seeds []expansionSeed
 	for id, sc := range scoreMap {
-		seeds = append(seeds, seedInfo{id: id, score: sc.score})
+		seeds = append(seeds, expansionSeed{id: id, score: sc.score})
 	}
+	// Pinned memories seed expansion but are NOT candidates — they are already
+	// in the result, and seen[] keeps expansion from re-adding them.
+	seeds = append(seeds, extraSeeds...)
 
 	// Sort seeds by score descending so highest-scored seeds expand first
 	sort.Slice(seeds, func(i, j int) bool {
