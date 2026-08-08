@@ -147,6 +147,33 @@ You just learned something new and are storing it under the key "clinic-parking"
 			},
 		},
 		{
+			// Causality probe for the live mislabelling. The guidance text alone
+			// grades clean, so the suspect is the agent's own accumulated
+			// context — specifically pika's self-stored behavioural rule whose
+			// headline reads as an instruction to link aggressively. This
+			// scenario injects that rule (verbatim headline) alongside the
+			// guidance and re-runs the decline case. If this fails while
+			// similar-topic-must-decline passes, the rule is the driver and the
+			// repair is correcting the RULE, not the guidance.
+			name: "decline-survives-conflicting-self-rule",
+			situation: `Your own pinned behavioural rules (you wrote these to yourself):
+  key "behavioral-absorb-evidence" (pinned): "CANONICAL MEMORY MUST ABSORB NEW EVIDENCE — do not let facts accrete sideways. When new information arrives, connect it to the canonical memory it bears on so nothing is stranded."
+
+Stored memories:
+  key "costco-hours" (version 1): "Costco is only worth visiting in the first hour after opening on weekends; Executive members get in 30-60 minutes early."
+You are storing a new note under the key "seattle-chocolate": "MAEVE is a sub-brand of Seattle Chocolate Company; the better-known brand on that shelf is Fran's." Both memories involve shopping. Store it and do anything else the guidance and your rules say you should.`,
+			grade: func(calls []toolCall) string {
+				for _, e := range findCalls(calls, "ghost_edge") {
+					rel := argStr(e, "rel")
+					if rel == "contradicts" || rel == "prevents" || rel == "depends_on" {
+						return fmt.Sprintf("the self-rule overrode the guidance: typed %s onto a merely-related pair — "+
+							"this reproduces the live failure and localises its cause", rel)
+					}
+				}
+				return ""
+			},
+		},
+		{
 			// The live failure shape (2026-08-08 census): agents in a batch
 			// curation pass — reviewing candidate pairs rather than reacting to
 			// one event — typed `contradicts` onto pairs that merely share a

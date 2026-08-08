@@ -57,7 +57,7 @@ Relationships (edges) — the most under-used part of ghost:
 Memories are a graph, not a list. When a seed memory is retrieved, its neighbours are pulled in with it, so an edge is how you make sure a fact arrives WITH the thing that qualifies it. Three relations reserve budget and still arrive when context is tight; reach for them when the neighbour's absence would make you state something FALSE:
 - contradicts — the newer, correcting memory points at the stale one. Without it you assert a corrected fact as current.
 - depends_on  — the task points at its PREREQUISITE. Without it you recommend an action that will fail.
-- prevents    — the thing being ruled out points at the CONSTRAINT ruling it out (allergies, restrictions, hard rules).
+- prevents    — the thing being ruled out points at the CONSTRAINT ruling it out (allergies, restrictions, hard rules). TRIGGER: whenever you STORE a plan or intention (meals, purchases, outings, scheduling), check your standing constraints; if one bears on it, create the prevents edge in the same breath as the put. A plan stored without its constraint is how you later suggest exactly the thing someone must avoid.
 caused_by / implies / refines are surfaced when there is room. relates_to is auto-created for you — never hand-write it, and never label ordinary "same topic" similarity as a typed relation, because that takes reserved budget from real search results.
 Direction is not cosmetic: an edge written the wrong way round is stored, looks correct, and is silently ignored during retrieval. Read it as a sentence, "from <rel> to".
 - ghost_edge: create one edge you already know about.
