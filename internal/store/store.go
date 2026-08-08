@@ -45,6 +45,14 @@ type PutParams struct {
 	// it monotonically and Get returns it, so the read-edit-write loop needs
 	// no extra hashing step.
 	BaseVersion int
+	// SourceUser records the PERSON this memory originated from ("mami",
+	// "papi"); a chat is a channel and belongs in tags, not here. Provenance
+	// makes agent-fit possible (a stated preference outranks an inference
+	// about the same person), makes dead-weight attributable, and makes a
+	// poisoned memory forensically visible. Empty = unknown, never backfilled.
+	SourceUser string
+	// SourceKind: stated | observed | self | peer. Empty = unknown.
+	SourceKind string
 }
 
 // FileParam specifies a file to link to a memory.
@@ -68,6 +76,9 @@ type ListParams struct {
 	Tags     []string
 	Limit    int
 	KeysOnly bool
+	// SourceUser filters to memories originating from this person — the
+	// fitting-to-the-user read path ("what has mami told me").
+	SourceUser string
 	// PinnedOnly restricts results to pinned memories. Lets clients fetch
 	// the always-on set (e.g. a system-prompt snapshot) without Context()'s
 	// budget-packed backfill and without Get()'s access-count side effects.

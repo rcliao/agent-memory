@@ -15,6 +15,15 @@ import (
 	"github.com/rcliao/ghost/internal/model"
 )
 
+// nullIfEmpty stores empty provenance as NULL — unknown origin is absent,
+// not an empty string.
+func nullIfEmpty(v string) interface{} {
+	if v == "" {
+		return nil
+	}
+	return v
+}
+
 func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, error) {
 	if s.contractReadOnly {
 		return nil, s.errContractNewer()
@@ -195,10 +204,11 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		pinnedInt = 1
 	}
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO memories (id, ns, key, content, kind, tags, version, supersedes, created_at, priority, access_count, meta, expires_at, importance, est_tokens, tier, pinned)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO memories (id, ns, key, content, kind, tags, version, supersedes, created_at, priority, access_count, meta, expires_at, importance, est_tokens, tier, pinned, source_user, source_kind)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, p.NS, p.Key, p.Content, kind, tagsJSON, version, supersedes,
-		now.Format(time.RFC3339), priority, metaPtr, expiresAt, importance, estTokens, tier, pinnedInt)
+		now.Format(time.RFC3339), priority, metaPtr, expiresAt, importance, estTokens, tier, pinnedInt,
+		nullIfEmpty(p.SourceUser), nullIfEmpty(p.SourceKind))
 	if err != nil {
 		return nil, fmt.Errorf("insert memory: %w", err)
 	}
@@ -730,7 +740,7 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 		// If the latest version has been Rm'd, no versions are shown.
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
 				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at,
-				        importance, utility_count, tier, est_tokens, pinned
+				        importance, utility_count, tier, est_tokens, pinned, source_user, source_kind
 				 FROM memories WHERE ns = ? AND key = ?
 				   AND EXISTS (SELECT 1 FROM memories m2
 				               WHERE m2.ns = memories.ns AND m2.key = memories.key
@@ -741,7 +751,7 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 		// Specific version lookup includes superseded (soft-deleted) versions
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
 				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at,
-				        importance, utility_count, tier, est_tokens, pinned
+				        importance, utility_count, tier, est_tokens, pinned, source_user, source_kind
 				 FROM memories WHERE ns = ? AND key = ? AND version = ?
 				   AND (expires_at IS NULL OR expires_at > ?)
 				 LIMIT 1`
@@ -749,7 +759,7 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 	} else {
 		query = `SELECT id, ns, key, content, kind, tags, version, supersedes,
 				        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at,
-				        importance, utility_count, tier, est_tokens, pinned
+				        importance, utility_count, tier, est_tokens, pinned, source_user, source_kind
 				 FROM memories WHERE ns = ? AND key = ? AND deleted_at IS NULL
 				   AND (expires_at IS NULL OR expires_at > ?)
 				 ORDER BY version DESC LIMIT 1`
@@ -795,7 +805,7 @@ func (s *SQLiteStore) Get(ctx context.Context, p GetParams) ([]model.Memory, err
 func (s *SQLiteStore) History(ctx context.Context, p HistoryParams) ([]model.Memory, error) {
 	query := `SELECT id, ns, key, content, kind, tags, version, supersedes,
 			         created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at,
-				        importance, utility_count, tier, est_tokens, pinned
+				        importance, utility_count, tier, est_tokens, pinned, source_user, source_kind
 			  FROM memories WHERE ns = ? AND key = ?
 			  ORDER BY version ASC`
 
@@ -860,10 +870,15 @@ func (s *SQLiteStore) List(ctx context.Context, p ListParams) ([]model.Memory, e
 		where = append(where, "m.pinned = 1")
 	}
 
+	if p.SourceUser != "" {
+		where = append(where, "m.source_user = ?")
+		args = append(args, p.SourceUser)
+	}
+
 	query := fmt.Sprintf(`
 		SELECT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
 		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at,
-		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned
+		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind
 		FROM memories m
 		INNER JOIN (
 			SELECT ns, key, MAX(version) AS max_ver

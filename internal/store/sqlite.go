@@ -31,11 +31,11 @@ type SQLiteStore struct {
 	embedder embedding.Embedder
 	// contractReadOnly: the DB was written under a NEWER store contract than
 	// this binary supports — writes are refused (see contract.go).
-	contractReadOnly bool
-	reranker embedding.Reranker
-	rerankErrOnce sync.Once // one-shot warn when the reranker fails (see rerankMaxP)
-	pinOverflowWarned sync.Map // ns -> bool, one-shot warn when pinned exceeds the pin budget
-	nowFn    func() time.Time // injectable clock; nil means time.Now
+	contractReadOnly  bool
+	reranker          embedding.Reranker
+	rerankErrOnce     sync.Once        // one-shot warn when the reranker fails (see rerankMaxP)
+	pinOverflowWarned sync.Map         // ns -> bool, one-shot warn when pinned exceeds the pin budget
+	nowFn             func() time.Time // injectable clock; nil means time.Now
 }
 
 // now is the store's clock. Retrieval scoring, write timestamps, and lifecycle
@@ -197,6 +197,13 @@ func (s *SQLiteStore) migrate() error {
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN utility_count INTEGER NOT NULL DEFAULT 0`)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN tier TEXT NOT NULL DEFAULT 'stm'`)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN est_tokens INTEGER NOT NULL DEFAULT 0`)
+
+	// Write provenance (2026-08): the PERSON a memory originated from and how
+	// it entered the store. Nullable on purpose — unknown origin stays NULL,
+	// never backfilled.
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN source_user TEXT`)
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN source_kind TEXT`)
+	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memories_source_user ON memories(ns, source_user)`)
 	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier)`)
 	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC)`)
 
@@ -428,7 +435,7 @@ type scanner interface {
 
 func scanMemory(row scanner) (model.Memory, error) {
 	var m model.Memory
-	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier sql.NullString
+	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier, sourceUser, sourceKind sql.NullString
 	var createdAt string
 	var importance sql.NullFloat64
 	var utilityCount, estTokens, pinned sql.NullInt64
@@ -438,6 +445,7 @@ func scanMemory(row scanner) (model.Memory, error) {
 		&m.Version, &supersedes, &createdAt, &deletedAt,
 		&m.Priority, &m.AccessCount, &lastAccessed, &meta, &expiresAt,
 		&importance, &utilityCount, &tier, &estTokens, &pinned,
+		&sourceUser, &sourceKind,
 	)
 	if err != nil {
 		return m, err
@@ -483,6 +491,12 @@ func scanMemory(row scanner) (model.Memory, error) {
 	}
 	if pinned.Valid && pinned.Int64 != 0 {
 		m.Pinned = true
+	}
+	if sourceUser.Valid {
+		m.SourceUser = sourceUser.String
+	}
+	if sourceKind.Valid {
+		m.SourceKind = sourceKind.String
 	}
 
 	return m, nil
