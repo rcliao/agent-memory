@@ -15,7 +15,10 @@ import (
 	"github.com/rcliao/ghost/internal/store"
 )
 
-const serverInstructions = `Ghost is a persistent memory system. Use it to store and recall knowledge across sessions.
+// ServerInstructions is the guidance every MCP agent receives at session
+// start. Exported so the agent-guidance eval grades the EXACT text production
+// serves — a copy would drift.
+const ServerInstructions = `Ghost is a persistent memory system. Use it to store and recall knowledge across sessions.
 
 When to use:
 - Store a memory when you learn something worth remembering: user preferences, project decisions, debugging insights, or corrections the user makes.
@@ -73,13 +76,31 @@ When a memory is wrong or outdated, diminish or archive it:
 
 When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.`
 
+// EdgeToolDescription is the ghost_edge tool description agents see.
+// Exported so the agent-guidance eval grades the exact production text.
+const EdgeToolDescription = "Create, remove, or list weighted edges (associations) between memories. Edges enable DAG-based retrieval — when a seed memory is found, its neighbours are pulled in via spreading activation.\n\n" +
+	"DIRECTION IS NOT COSMETIC. An edge written the wrong way round is silently inert: it is stored, it looks correct in `list`, and it never influences retrieval. Nothing warns you. Read the edge as a sentence 'from <rel> to':\n" +
+	"  from --contradicts--> to  the NEW/correcting memory points at the stale one it refutes\n" +
+	"  from --refines-->     to  the LATER, more precise memory points at the one it improves\n" +
+	"  from --depends_on-->  to  the dependent task points at its PREREQUISITE\n" +
+	"  from --caused_by-->   to  the symptom points at its CAUSE\n" +
+	"  from --prevents-->    to  the thing being ruled out points at the CONSTRAINT that rules it out\n" +
+	"  from --implies-->     to  the premise points at its CONSEQUENCE\n" +
+	"  from --contains-->    to  the parent summary points at each CHILD it covers\n" +
+	"  relates_to is symmetric; merged_into is a dedup audit trail and is never traversed.\n\n" +
+	"WHICH RELATION TO REACH FOR. contradicts, depends_on and prevents are the high-value ones: retrieval reserves budget for them, so they still reach the agent when context is tight. Use them when their ABSENCE would make you state something false — a corrected fact asserted as current, an action recommended without its blocker, a suggestion that violates a standing constraint (allergies, restrictions, hard rules). caused_by/implies/refines are surfaced when there is room. Do not reach for a typed relation when 'these two are about the same topic' is the truth — that is relates_to, and mislabelling it takes reserved budget away from real search results.\n\n" +
+	"DEPTH: chains are followed two links deep for depends_on, prevents and caused_by — so 'book the dentist' -> 'the card lapsed' -> 'the form is unsigned' reaches the unsigned form, which is the only actionable part. Everything else, including relates_to and contradicts, is single-hop: what you want is the contradiction of a fact in context, not the contradiction of that contradiction. Beyond two links nothing is reached, so for a long chain link the memory a query will actually find directly to the blocker that matters."
+
+// PatchToolDescription is the ghost_patch tool description agents see.
+const PatchToolDescription = "Edit a memory by applying a unified diff to its current content — PREFER THIS OVER ghost_put WHEN EDITING an existing memory. Only the touched lines change; everything else survives byte-for-byte, so repeated edits cannot slowly reword the parts you did not mean to change (whole-value rewrites regenerate every sentence and drift). Two guards fail loudly instead of corrupting: hunks whose context lines do not match the current content verbatim are refused (category context_mismatch — re-read with ghost_get, regenerate the diff, retry), and the write lands only if the head is still the version you patched (category version_conflict — a concurrent writer got there first; re-read and retry). Workflow: ghost_get to read content+version -> generate a standard unified diff (@@ hunks, space/-/+ lines) -> ghost_patch, optionally with dry_run:true first to preview the result without writing."
+
 // Serve starts the MCP server on stdio, blocking until the connection closes.
 func Serve(ctx context.Context, st store.Store) error {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "ghost",
 		Version: "1.2.0",
 	}, &mcp.ServerOptions{
-		Instructions: serverInstructions,
+		Instructions: ServerInstructions,
 	})
 
 	registerTools(server, st)
@@ -301,19 +322,8 @@ func registerTools(server *mcp.Server, st store.Store) {
 	})
 
 	server.AddTool(&mcp.Tool{
-		Name: "ghost_edge",
-		Description: "Create, remove, or list weighted edges (associations) between memories. Edges enable DAG-based retrieval — when a seed memory is found, its neighbours are pulled in via spreading activation.\n\n" +
-			"DIRECTION IS NOT COSMETIC. An edge written the wrong way round is silently inert: it is stored, it looks correct in `list`, and it never influences retrieval. Nothing warns you. Read the edge as a sentence 'from <rel> to':\n" +
-			"  from --contradicts--> to  the NEW/correcting memory points at the stale one it refutes\n" +
-			"  from --refines-->     to  the LATER, more precise memory points at the one it improves\n" +
-			"  from --depends_on-->  to  the dependent task points at its PREREQUISITE\n" +
-			"  from --caused_by-->   to  the symptom points at its CAUSE\n" +
-			"  from --prevents-->    to  the thing being ruled out points at the CONSTRAINT that rules it out\n" +
-			"  from --implies-->     to  the premise points at its CONSEQUENCE\n" +
-			"  from --contains-->    to  the parent summary points at each CHILD it covers\n" +
-			"  relates_to is symmetric; merged_into is a dedup audit trail and is never traversed.\n\n" +
-			"WHICH RELATION TO REACH FOR. contradicts, depends_on and prevents are the high-value ones: retrieval reserves budget for them, so they still reach the agent when context is tight. Use them when their ABSENCE would make you state something false — a corrected fact asserted as current, an action recommended without its blocker, a suggestion that violates a standing constraint (allergies, restrictions, hard rules). caused_by/implies/refines are surfaced when there is room. Do not reach for a typed relation when 'these two are about the same topic' is the truth — that is relates_to, and mislabelling it takes reserved budget away from real search results.\n\n" +
-			"DEPTH: chains are followed two links deep for depends_on, prevents and caused_by — so 'book the dentist' -> 'the card lapsed' -> 'the form is unsigned' reaches the unsigned form, which is the only actionable part. Everything else, including relates_to and contradicts, is single-hop: what you want is the contradiction of a fact in context, not the contradiction of that contradiction. Beyond two links nothing is reached, so for a long chain link the memory a query will actually find directly to the blocker that matters.",
+		Name:        "ghost_edge",
+		Description: EdgeToolDescription,
 		InputSchema: schema([]string{"ns", "from_key"}, map[string]map[string]any{
 			"ns":       prop("string", "Namespace (used for both from and to)"),
 			"from_key": prop("string", "Source memory key"),
@@ -389,7 +399,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 
 	server.AddTool(&mcp.Tool{
 		Name:        "ghost_patch",
-		Description: "Edit a memory by applying a unified diff to its current content — PREFER THIS OVER ghost_put WHEN EDITING an existing memory. Only the touched lines change; everything else survives byte-for-byte, so repeated edits cannot slowly reword the parts you did not mean to change (whole-value rewrites regenerate every sentence and drift). Two guards fail loudly instead of corrupting: hunks whose context lines do not match the current content verbatim are refused (category context_mismatch — re-read with ghost_get, regenerate the diff, retry), and the write lands only if the head is still the version you patched (category version_conflict — a concurrent writer got there first; re-read and retry). Workflow: ghost_get to read content+version -> generate a standard unified diff (@@ hunks, space/-/+ lines) -> ghost_patch, optionally with dry_run:true first to preview the result without writing.",
+		Description: PatchToolDescription,
 		InputSchema: schema([]string{"ns", "key", "patch"}, map[string]map[string]any{
 			"ns":           prop("string", "Namespace"),
 			"key":          prop("string", "Memory key"),
