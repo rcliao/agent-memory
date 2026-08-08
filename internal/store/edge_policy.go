@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
 // ── Per-relation expansion policy ────────────────────────────────
@@ -232,9 +233,45 @@ func neighborForSeed(e Edge, seedID string) (neighborID string, ok bool) {
 	return "", false
 }
 
-// expansionSeed is a starting point for spreading activation: a memory ID and
-// the score its neighbours' propagation is scaled from.
+// expansionSeed is a starting point for spreading activation: a memory ID, the
+// score its neighbours' propagation is scaled from, and when the memory was
+// created — the dormant-resurrection rule needs to know whether a refuter is
+// NEWER than the seed it refutes.
 type expansionSeed struct {
-	id    string
-	score float64
+	id        string
+	score     float64
+	createdAt time.Time
+}
+
+// resurrectsDormant decides whether a dormant neighbour may be pulled back
+// into context by this edge. Dormant means "not worth surfacing on its own",
+// and a reserve-class neighbour is never surfacing on its own — something
+// already in context is false without it. But the exemption must not become a
+// resurrection service for retired claims, so it is bounded twice:
+//
+//   - Only the AUTHORITATIVE side of a reserve relation qualifies: the refuter
+//     (from) of a contradicts edge, the prerequisite or constraint (to) of a
+//     depends_on/prevents edge. Traversing contradicts the other way reaches
+//     the REFUTED memory, and a refuted dormant memory is exactly what the
+//     lifecycle retired.
+//   - A contradicts refuter must be NEWER than the seed it refutes. A
+//     correction is newer than the fact it corrects by construction; a dormant
+//     memory on the from side that is OLDER than its target is a retired
+//     conflicting claim that lost, not a decayed correction. Measured need on
+//     the live umbreon store: 78 of 144 refuters had decayed to dormant by
+//     disuse while their stale targets stayed live — corrections are only
+//     exercised through edges at assembly time, so skipping dormant neighbours
+//     starved them of the access that would have kept them alive. A death
+//     spiral for exactly the memories that matter most.
+func resurrectsDormant(e Edge, neighborID string, neighborCreated, seedCreated time.Time) bool {
+	if !reservesBudget(e.Rel) {
+		return false
+	}
+	switch e.Rel {
+	case "contradicts":
+		return neighborID == e.FromID && neighborCreated.After(seedCreated)
+	case "depends_on", "prevents":
+		return neighborID == e.ToID
+	}
+	return false
 }

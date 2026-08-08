@@ -206,3 +206,66 @@ func TestRelatesToStaysUnderMinScoreFloor(t *testing.T) {
 			"exemption has widened beyond typed relations")
 	}
 }
+
+// ── The second production killer: decay buries the refuter ───────────
+//
+// The MinScore fix turned out not to move umbreon at all (0/12 -> 0/12), and
+// the census explains why: 78 of its 144 contradicts refuters are DORMANT, and
+// expandEdges skips dormant neighbours unconditionally. So a stale fact can
+// stay alive in ltm while the very memory that corrects it decays out of
+// reach — stale-without-fresh, manufactured by the lifecycle. Ghost has
+// already lost a correct allergy fact to exactly this shape.
+//
+// The rule this pins: a RESERVE-CLASS edge may pull its neighbour out of
+// dormancy. Dormant is "not worth surfacing on its own", and a reserve-class
+// neighbour is never surfacing on its own — something already in context is
+// false without it. Background and accompany relations still respect
+// dormancy; the same false-vs-incomplete line drawn everywhere else.
+func TestReserveEdgeReachesDormantNeighbour(t *testing.T) {
+	ctx := context.Background()
+	s := stressStore(t, []householdMemory{
+		{key: "reader", content: "The office badge reader on the third floor accepts the old blue cards."},
+		{key: "correction", content: "Facilities swapped that unit out in July and anything issued before then is refused now."},
+	}, [][3]string{{"correction", "reader", "contradicts"}})
+
+	// The correction has decayed to dormant; the stale fact is still live.
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE memories SET tier='dormant' WHERE ns='agent:home' AND key='correction'`); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.Context(ctx, ContextParams{
+		NS: "agent:home", Query: "which badge works on the third floor reader", Budget: 800})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasMarker(res, "swapped that unit out") {
+		t.Errorf("dormant refuter did not arrive: a live stale fact is being served with " +
+			"its correction decayed out of reach — stale-without-fresh via the lifecycle")
+	}
+}
+
+// TestBackgroundEdgeRespectsDormancy is the boundary: dormancy still means
+// something for non-reserve relations. If this fails, dormant memories are
+// leaking back through ordinary similarity edges and archives stop being
+// archives.
+func TestBackgroundEdgeRespectsDormancy(t *testing.T) {
+	ctx := context.Background()
+	s := stressStore(t, []householdMemory{
+		{key: "reader", content: "The office badge reader on the third floor accepts the old blue cards."},
+		{key: "trivia", content: "The lobby fish tank was refilled with a different gravel colour in spring."},
+	}, [][3]string{{"reader", "trivia", "relates_to"}})
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE memories SET tier='dormant' WHERE ns='agent:home' AND key='trivia'`); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Context(ctx, ContextParams{
+		NS: "agent:home", Query: "which badge works on the third floor reader", Budget: 800})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasMarker(res, "different gravel colour") {
+		t.Errorf("a dormant memory resurfaced through a relates_to edge — dormancy no " +
+			"longer means anything for the bulk relation")
+	}
+}

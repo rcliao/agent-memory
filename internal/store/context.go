@@ -178,7 +178,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 				// per-relation traversal landed. Measured by
 				// TestEvalGraphPullThrough, where the pinned case failed while
 				// the identical unpinned case passed.
-				pinnedSeeds = append(pinnedSeeds, expansionSeed{id: m.ID, score: m.Importance})
+				pinnedSeeds = append(pinnedSeeds, expansionSeed{id: m.ID, score: m.Importance, createdAt: m.CreatedAt})
 			} else {
 				pinDropped++
 			}
@@ -622,7 +622,7 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 	// Snapshot seed IDs + scores (don't iterate map while mutating)
 	var seeds []expansionSeed
 	for id, sc := range scoreMap {
-		seeds = append(seeds, expansionSeed{id: id, score: sc.score})
+		seeds = append(seeds, expansionSeed{id: id, score: sc.score, createdAt: sc.memory.CreatedAt})
 	}
 	// Pinned memories seed expansion but are NOT candidates — they are already
 	// in the result, and seen[] keeps expansion from re-adding them.
@@ -732,8 +732,18 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 					if err != nil {
 						continue
 					}
-					// Skip dormant memories — they are archived and should not surface.
-					if m.Tier == "dormant" {
+					// Dormant memories are archived and do not surface — unless a
+					// RESERVE-CLASS edge is what reached them. Dormant means
+					// "not worth surfacing on its own", and a reserve-class
+					// neighbour is never surfacing on its own: something already
+					// in context is false without it. Measured need on the live
+					// umbreon store: 78 of 144 contradicts refuters had decayed
+					// to dormant while their stale targets stayed live in ltm —
+					// stale-without-fresh manufactured by the lifecycle, the
+					// same shape that once hid a correct allergy fact.
+					// Background and accompany relations still respect
+					// dormancy, so archives stay archives.
+					if m.Tier == "dormant" && !resurrectsDormant(edge, neighborID, m.CreatedAt, seed.createdAt) {
 						continue
 					}
 					// Cap propagated score for edge-only candidates (except contradicts)
@@ -755,7 +765,7 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 					// This neighbour may itself seed the next hop. Its propagated
 					// score carries forward, so damping compounds with depth and a
 					// distant memory cannot outrank a nearer one.
-					nextFrontier = append(nextFrontier, expansionSeed{id: neighborID, score: propagated})
+					nextFrontier = append(nextFrontier, expansionSeed{id: neighborID, score: propagated, createdAt: m.CreatedAt})
 				}
 			}
 		}
