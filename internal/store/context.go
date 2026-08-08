@@ -616,91 +616,121 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 	}
 
 	totalExpanded := 0
-	for _, seed := range seeds {
-		if totalExpanded >= cfg.MaxExpansionTotal {
-			break
-		}
-
-		edges, err := s.getEdgesForExpansion(ctx, seed.id, cfg.MinEdgeWeight, cfg.MaxEdgesPerSeed)
-		if err != nil {
-			continue
-		}
-
-		for _, edge := range edges {
+	// Breadth-first over hops. `frontier` is the set of seeds for the current
+	// hop; neighbours discovered during it become the next hop's frontier, but
+	// only along relations whose policy grants that depth (see MaxHops). Depth
+	// is capped per relation rather than globally so a prerequisite chain can be
+	// followed without `relates_to` dragging in a second-order neighbourhood.
+	expandedFrom := map[string]bool{}
+	frontier := seeds
+	for hop := 1; hop <= maxHopsConfigured(); hop++ {
+		var nextFrontier []expansionSeed
+		for _, seed := range frontier {
 			if totalExpanded >= cfg.MaxExpansionTotal {
 				break
 			}
-
-			neighborID, followable := neighborForSeed(edge, seed.id)
-			if !followable {
-				continue // self-loop, or the relation does not travel this way
+			// A memory expands once, at the shallowest depth it is reached.
+			if expandedFrom[seed.id] {
+				continue
 			}
+			expandedFrom[seed.id] = true
 
-			// Skip if this neighbor is a pinned memory already in context
-			if seen[neighborID] {
+			edges, err := s.getEdgesForExpansion(ctx, seed.id, cfg.MinEdgeWeight, cfg.MaxEdgesPerSeed)
+			if err != nil {
 				continue
 			}
 
-			propagated := seed.score * edge.Weight * cfg.Damping
+			for _, edge := range edges {
+				if totalExpanded >= cfg.MaxExpansionTotal {
+					break
+				}
 
-			// contradicts edges get special treatment: the agent must see conflicts.
-			// Give contradicting memories a high minimum score so they rank near the top.
-			isContradiction := edge.Rel == "contradicts"
-			if isContradiction {
-				minContradictScore := seed.score * 0.8 // 80% of the seed's score
-				if propagated < minContradictScore {
-					propagated = minContradictScore
+				// Depth gate: past the first hop a relation is followed only if
+				// its own policy grants that much reach.
+				if hop > hopsFor(edge.Rel) {
+					continue
 				}
-			}
 
-			// Handling class decides whether this neighbour may claim reserved
-			// budget during packing. Score handling below stays specific to
-			// `contradicts`: measurement showed score is not what carries a
-			// neighbour past the near-duplicate wall, so widening it would add
-			// risk without adding effect. Reservation is the lever being widened.
-			isReserved := reservesBudget(edge.Rel)
-			if isReserved {
-				if existing, ok := scoreMap[neighborID]; ok {
-					existing.reserved = true
+				neighborID, followable := neighborForSeed(edge, seed.id)
+				if !followable {
+					continue // self-loop, or the relation does not travel this way
 				}
-			}
-			if existing, ok := scoreMap[neighborID]; ok {
-				// Memory already in pool — additive boost, capped
-				origScore := originalScores[neighborID]
-				maxBoost := origScore * cfg.MaxBoostFactor
-				if maxBoost < 0.15 {
-					maxBoost = 0.15
+
+				// Skip if this neighbor is a pinned memory already in context
+				if seen[neighborID] {
+					continue
 				}
-				// contradicts edges bypass the cap
+
+				propagated := seed.score * edge.Weight * cfg.Damping
+
+				// contradicts edges get special treatment: the agent must see conflicts.
+				// Give contradicting memories a high minimum score so they rank near the top.
+				isContradiction := edge.Rel == "contradicts"
 				if isContradiction {
-					existing.score = math.Max(existing.score, propagated)
-				} else {
-					alreadyBoosted := existing.score - origScore
-					remaining := maxBoost - alreadyBoosted
-					if remaining > 0 {
-						boost := math.Min(propagated, remaining)
-						existing.score += boost
+					minContradictScore := seed.score * 0.8 // 80% of the seed's score
+					if propagated < minContradictScore {
+						propagated = minContradictScore
 					}
 				}
-			} else {
-				// New neighbor — load from DB
-				m, err := s.loadMemoryByID(ctx, neighborID)
-				if err != nil {
-					continue
+
+				// Handling class decides whether this neighbour may claim reserved
+				// budget during packing. Score handling below stays specific to
+				// `contradicts`: measurement showed score is not what carries a
+				// neighbour past the near-duplicate wall, so widening it would add
+				// risk without adding effect. Reservation is the lever being widened.
+				isReserved := reservesBudget(edge.Rel)
+				if isReserved {
+					if existing, ok := scoreMap[neighborID]; ok {
+						existing.reserved = true
+					}
 				}
-				// Skip dormant memories — they are archived and should not surface.
-				if m.Tier == "dormant" {
-					continue
+				if existing, ok := scoreMap[neighborID]; ok {
+					// Memory already in pool — additive boost, capped
+					origScore := originalScores[neighborID]
+					maxBoost := origScore * cfg.MaxBoostFactor
+					if maxBoost < 0.15 {
+						maxBoost = 0.15
+					}
+					// contradicts edges bypass the cap
+					if isContradiction {
+						existing.score = math.Max(existing.score, propagated)
+					} else {
+						alreadyBoosted := existing.score - origScore
+						remaining := maxBoost - alreadyBoosted
+						if remaining > 0 {
+							boost := math.Min(propagated, remaining)
+							existing.score += boost
+						}
+					}
+				} else {
+					// New neighbor — load from DB
+					m, err := s.loadMemoryByID(ctx, neighborID)
+					if err != nil {
+						continue
+					}
+					// Skip dormant memories — they are archived and should not surface.
+					if m.Tier == "dormant" {
+						continue
+					}
+					// Cap propagated score for edge-only candidates (except contradicts)
+					if !isContradiction && propagated > 0.3 {
+						propagated = 0.3
+					}
+					scoreMap[neighborID] = &contextCandidate{memory: *m, score: propagated, reserved: isReserved}
+					originalScores[neighborID] = 0 // no direct score
+					totalExpanded++
+					// This neighbour may itself seed the next hop. Its propagated
+					// score carries forward, so damping compounds with depth and a
+					// distant memory cannot outrank a nearer one.
+					nextFrontier = append(nextFrontier, expansionSeed{id: neighborID, score: propagated})
 				}
-				// Cap propagated score for edge-only candidates (except contradicts)
-				if !isContradiction && propagated > 0.3 {
-					propagated = 0.3
-				}
-				scoreMap[neighborID] = &contextCandidate{memory: *m, score: propagated, reserved: isReserved}
-				originalScores[neighborID] = 0 // no direct score
-				totalExpanded++
 			}
 		}
+		if len(nextFrontier) == 0 {
+			break
+		}
+		sort.Slice(nextFrontier, func(i, j int) bool { return nextFrontier[i].score > nextFrontier[j].score })
+		frontier = nextFrontier
 	}
 
 	// Parent boosting: if a seed is a child of a contains parent,
