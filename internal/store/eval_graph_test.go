@@ -173,8 +173,8 @@ func graphCorpus() []graphCase {
 			wantTraversal:    true,
 		},
 		{
-			rel:              "depends_on",
-			seedContent:      "Deploying the reporting service requires the migration step to have completed.",
+			rel:         "depends_on",
+			seedContent: "Deploying the reporting service requires the migration step to have completed.",
 			// Careful with vocabulary: an earlier version said "migrate-reports
 			// task", whose "reports" made this a plain lexical hit on the query
 			// and put the neighbour in BOTH arms. The edge then looked inert
@@ -209,9 +209,9 @@ func graphCorpus() []graphCase {
 			wantTraversal:    true,
 		},
 		{
-			rel:              "contains",
-			seedContent:      "The Q3 onboarding review covered tooling, access requests and mentoring.",
-			neighbourContent: "Pairing was dropped after the second week because nobody had time to sit with anyone.",
+			rel:                     "contains",
+			seedContent:             "The Q3 onboarding review covered tooling, access requests and mentoring.",
+			neighbourContent:        "Pairing was dropped after the second week because nobody had time to sit with anyone.",
 			query:                   "what did the Q3 onboarding review cover",
 			neighbourMarker:         "dropped after the second week",
 			wantTraversal:           true,
