@@ -288,7 +288,18 @@ func registerTools(server *mcp.Server, st store.Store) {
 
 	server.AddTool(&mcp.Tool{
 		Name:        "ghost_edge",
-		Description: "Create, remove, or list weighted edges (associations) between memories. Edges enable DAG-based retrieval — when a seed memory is found, its neighbors are pulled in via spreading activation.",
+		Description: "Create, remove, or list weighted edges (associations) between memories. Edges enable DAG-based retrieval — when a seed memory is found, its neighbours are pulled in via spreading activation.\n\n" +
+			"DIRECTION IS NOT COSMETIC. An edge written the wrong way round is silently inert: it is stored, it looks correct in `list`, and it never influences retrieval. Nothing warns you. Read the edge as a sentence 'from <rel> to':\n" +
+			"  from --contradicts--> to  the NEW/correcting memory points at the stale one it refutes\n" +
+			"  from --refines-->     to  the LATER, more precise memory points at the one it improves\n" +
+			"  from --depends_on-->  to  the dependent task points at its PREREQUISITE\n" +
+			"  from --caused_by-->   to  the symptom points at its CAUSE\n" +
+			"  from --prevents-->    to  the thing being ruled out points at the CONSTRAINT that rules it out\n" +
+			"  from --implies-->     to  the premise points at its CONSEQUENCE\n" +
+			"  from --contains-->    to  the parent summary points at each CHILD it covers\n" +
+			"  relates_to is symmetric; merged_into is a dedup audit trail and is never traversed.\n\n" +
+			"WHICH RELATION TO REACH FOR. contradicts, depends_on and prevents are the high-value ones: retrieval reserves budget for them, so they still reach the agent when context is tight. Use them when their ABSENCE would make you state something false — a corrected fact asserted as current, an action recommended without its blocker, a suggestion that violates a standing constraint (allergies, restrictions, hard rules). caused_by/implies/refines are surfaced when there is room. Do not reach for a typed relation when 'these two are about the same topic' is the truth — that is relates_to, and mislabelling it takes reserved budget away from real search results.\n\n" +
+			"Expansion is SINGLE-HOP: a prerequisite of a prerequisite is not reached. Link the memory a query will actually find directly to every blocker that matters.",
 		InputSchema: schema([]string{"ns", "from_key"}, map[string]map[string]any{
 			"ns":       prop("string", "Namespace (used for both from and to)"),
 			"from_key": prop("string", "Source memory key"),
