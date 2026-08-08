@@ -105,6 +105,7 @@ func reservesBudget(rel string) bool {
 //     effects, and pulling all of them in is noise, not context.
 //   - merged_into — an audit trail, never traversed (weight 0, also excluded
 //     in SQL).
+//
 // The Handling column is deliberately scarce. Reserved budget is taken from
 // direct search hits, so promoting a relation into handleReserve makes every
 // query slightly worse in exchange for never missing that relation. Three
