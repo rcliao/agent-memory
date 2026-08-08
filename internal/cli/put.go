@@ -31,6 +31,7 @@ func init() {
 	cmd.Flags().String("file-rel", "modified", "File relationship: modified, created, deleted, read")
 	cmd.Flags().Bool("dedup", false, "Skip storing if a semantically similar memory already exists (cosine > 0.92)")
 	cmd.Flags().Bool("unlock", false, "Authorize overwriting a memory tagged 'locked' (owner-initiated edits only)")
+	cmd.Flags().Int("base-version", 0, "Compare-and-swap: fail unless the key's current version equals this (0 = unconditional write). On conflict, re-read with 'ghost get', remake the edit, retry")
 
 	cmd.MarkFlagRequired("ns")
 	cmd.MarkFlagRequired("key")
@@ -117,6 +118,7 @@ func runPut(cmd *cobra.Command, args []string) {
 
 	dedup, _ := cmd.Flags().GetBool("dedup")
 	unlock, _ := cmd.Flags().GetBool("unlock")
+	baseVersion, _ := cmd.Flags().GetInt("base-version")
 
 	mem, err := st.Put(cmd.Context(), store.PutParams{
 		NS:       ns,
@@ -131,7 +133,8 @@ func runPut(cmd *cobra.Command, args []string) {
 		Files:    files,
 		Dedup:    dedup,
 
-		Unlock: unlock,
+		Unlock:      unlock,
+		BaseVersion: baseVersion,
 	})
 	if err != nil {
 		exitErr("put", err)

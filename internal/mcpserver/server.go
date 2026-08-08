@@ -106,17 +106,18 @@ func registerTools(server *mcp.Server, st store.Store) {
 		Name:        "ghost_put",
 		Description: "Store or update a memory. Storing to an existing namespace:key creates a new version.",
 		InputSchema: schema([]string{"ns", "key", "content"}, map[string]map[string]any{
-			"ns":         prop("string", "Namespace (agent identity), e.g. agent:pikamini, agent:coder"),
-			"key":        prop("string", "Unique descriptive key within the namespace"),
-			"content":    prop("string", "Memory content text"),
-			"kind":       prop("string", "Memory kind: episodic (events, default for sensory/stm), semantic (facts, default for ltm), or procedural (how-to/skills)"),
-			"tags":       {"type": "array", "items": map[string]any{"type": "string"}, "description": "Tags for categorization (e.g. identity, lore, project:ghost, chat:123)"},
-			"priority":   prop("string", "Priority: low, normal (default), high, critical"),
-			"importance": prop("number", "Importance score 0.0-1.0 (default 0.5)"),
-			"tier":       prop("string", "Storage tier: sensory (ultra-short), stm (default), ltm (proven useful)"),
-			"pinned":     prop("boolean", "If true, always loaded in context and exempt from lifecycle decay"),
-			"ttl":        prop("string", "Time-to-live, e.g. 7d, 24h, 30m"),
-			"dedup":      prop("boolean", "If true, skip storing when a semantically similar memory already exists (cosine > 0.82)"),
+			"ns":           prop("string", "Namespace (agent identity), e.g. agent:pikamini, agent:coder"),
+			"key":          prop("string", "Unique descriptive key within the namespace"),
+			"content":      prop("string", "Memory content text"),
+			"kind":         prop("string", "Memory kind: episodic (events, default for sensory/stm), semantic (facts, default for ltm), or procedural (how-to/skills)"),
+			"tags":         {"type": "array", "items": map[string]any{"type": "string"}, "description": "Tags for categorization (e.g. identity, lore, project:ghost, chat:123)"},
+			"priority":     prop("string", "Priority: low, normal (default), high, critical"),
+			"importance":   prop("number", "Importance score 0.0-1.0 (default 0.5)"),
+			"tier":         prop("string", "Storage tier: sensory (ultra-short), stm (default), ltm (proven useful)"),
+			"pinned":       prop("boolean", "If true, always loaded in context and exempt from lifecycle decay"),
+			"ttl":          prop("string", "Time-to-live, e.g. 7d, 24h, 30m"),
+			"dedup":        prop("boolean", "If true, skip storing when a semantically similar memory already exists (cosine > 0.82)"),
+			"base_version": prop("number", "Compare-and-swap: the version you read before editing (from ghost_get). The write fails with a version-conflict error if another writer moved the key past it — re-read, remake your edit against the fresh content, retry. Omit or 0 for an unconditional write. Use this whenever you EDIT an existing memory rather than append a new one."),
 		}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var p struct {
@@ -131,6 +132,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			Pinned     bool     `json:"pinned"`
 			TTL        string   `json:"ttl"`
 			Dedup      bool     `json:"dedup"`
+			BaseVer    float64  `json:"base_version"`
 		}
 		if err := unmarshalArgs(req, &p); err != nil {
 			return errResult(err.Error()), nil
@@ -139,17 +141,18 @@ func registerTools(server *mcp.Server, st store.Store) {
 			return errResult("ns, key, and content are required"), nil
 		}
 		mem, err := st.Put(ctx, store.PutParams{
-			NS:         p.NS,
-			Key:        p.Key,
-			Content:    p.Content,
-			Kind:       p.Kind,
-			Tags:       p.Tags,
-			Priority:   p.Priority,
-			Importance: p.Importance,
-			Tier:       p.Tier,
-			Pinned:     p.Pinned,
-			TTL:        p.TTL,
-			Dedup:      p.Dedup,
+			NS:          p.NS,
+			Key:         p.Key,
+			Content:     p.Content,
+			Kind:        p.Kind,
+			Tags:        p.Tags,
+			Priority:    p.Priority,
+			Importance:  p.Importance,
+			Tier:        p.Tier,
+			Pinned:      p.Pinned,
+			TTL:         p.TTL,
+			Dedup:       p.Dedup,
+			BaseVersion: int(p.BaseVer),
 		})
 		if err != nil {
 			return errResult(err.Error()), nil
