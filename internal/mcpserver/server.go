@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -384,6 +385,52 @@ func registerTools(server *mcp.Server, st store.Store) {
 		default:
 			return errResult("invalid op: must be create, remove, or list"), nil
 		}
+	})
+
+	server.AddTool(&mcp.Tool{
+		Name:        "ghost_patch",
+		Description: "Edit a memory by applying a unified diff to its current content — PREFER THIS OVER ghost_put WHEN EDITING an existing memory. Only the touched lines change; everything else survives byte-for-byte, so repeated edits cannot slowly reword the parts you did not mean to change (whole-value rewrites regenerate every sentence and drift). Two guards fail loudly instead of corrupting: hunks whose context lines do not match the current content verbatim are refused (category context_mismatch — re-read with ghost_get, regenerate the diff, retry), and the write lands only if the head is still the version you patched (category version_conflict — a concurrent writer got there first; re-read and retry). Workflow: ghost_get to read content+version -> generate a standard unified diff (@@ hunks, space/-/+ lines) -> ghost_patch, optionally with dry_run:true first to preview the result without writing.",
+		InputSchema: schema([]string{"ns", "key", "patch"}, map[string]map[string]any{
+			"ns":           prop("string", "Namespace"),
+			"key":          prop("string", "Memory key"),
+			"patch":        prop("string", "Unified diff against the memory's current content (as returned by ghost_get)"),
+			"base_version": prop("number", "Version the diff was generated against (from ghost_get). Omit or 0 to patch the current head; either way a concurrent move fails with version_conflict rather than overwriting"),
+			"dry_run":      prop("boolean", "Validate and return the resulting content without writing"),
+			"allow_empty":  prop("boolean", "Permit a patch whose result is empty (refused otherwise — an emptied memory is almost always an upstream failure)"),
+		}),
+	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var p struct {
+			NS         string  `json:"ns"`
+			Key        string  `json:"key"`
+			Patch      string  `json:"patch"`
+			BaseVer    float64 `json:"base_version"`
+			DryRun     bool    `json:"dry_run"`
+			AllowEmpty bool    `json:"allow_empty"`
+		}
+		if err := unmarshalArgs(req, &p); err != nil {
+			return errResult(err.Error()), nil
+		}
+		if p.NS == "" || p.Key == "" || p.Patch == "" {
+			return errResult("ns, key, and patch are required"), nil
+		}
+		res, err := store.PatchMemory(ctx, st, store.PatchMemoryParams{
+			NS: p.NS, Key: p.Key, Patch: p.Patch,
+			BaseVersion: int(p.BaseVer), DryRun: p.DryRun, AllowEmpty: p.AllowEmpty,
+		})
+		if err != nil {
+			// Stable machine-readable categories: the agent's repair differs
+			// per category, so it must not have to parse prose to choose.
+			switch {
+			case errors.Is(err, store.ErrVersionConflict):
+				return errResult("version_conflict: " + err.Error() + " — re-read with ghost_get, remake the edit against the fresh content, retry"), nil
+			case errors.Is(err, store.ErrPatchContext):
+				return errResult("context_mismatch: " + err.Error() + " — the stored content differs from what this diff was written against; ghost_get it and regenerate the diff"), nil
+			case errors.Is(err, store.ErrPatchMalformed):
+				return errResult("malformed_patch: " + err.Error()), nil
+			}
+			return errResult(err.Error()), nil
+		}
+		return jsonResult(res)
 	})
 
 	server.AddTool(&mcp.Tool{
