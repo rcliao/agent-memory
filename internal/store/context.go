@@ -114,6 +114,12 @@ type contextCandidate struct {
 	// FTS/LIKE ones, 0 for edge-expanded arrivals. Kept so the MinScore floor
 	// can distinguish "weak match" from "strong match sunk by recency".
 	relevance float64
+	// viaEdge marks a candidate that entered the pool through graph expansion
+	// rather than search. These carry structural evidence, not topical
+	// relevance — their relevance is 0 BY CONSTRUCTION (being reachable only
+	// through an edge is what the edge is for), so any filter that judges
+	// candidates on relevance must not judge them at all.
+	viaEdge bool
 }
 
 // Context assembles relevant memories within a token budget.
@@ -372,7 +378,25 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			}
 			keep := candidates[:0]
 			for _, c := range candidates {
-				if c.score >= p.MinScore ||
+				// Structural candidates are exempt. The floor judges topical
+				// relevance, and a TYPED-edge candidate has none BY
+				// CONSTRUCTION — it was admitted on graph evidence, which has
+				// its own noise controls (per-relation direction and priority,
+				// weight threshold, damping, per-seed and total caps). Judging
+				// it here re-applies exactly the filter the graph exists to
+				// bypass. Measured before this exemption: with the production
+				// GHOST_MIN_SCORE=0.3, every non-contradicts edge neighbour
+				// was dropped ahead of the reserve hoist — the entire reserve
+				// class and all multi-hop traversal were inert in production
+				// while every eval passed, because the eval never set the
+				// floor. relates_to arrivals stay subject to the floor
+				// (viaEdge is not set for them): similarity edges make a
+				// similarity claim, and a relevance floor is a fair judge of
+				// that. `reserved` is listed separately: a refutation that is
+				// ALSO a weak direct search hit carries the same structural
+				// claim without viaEdge.
+				if c.viaEdge || c.reserved ||
+					c.score >= p.MinScore ||
 					(c.relevance >= 0.35 && c.relevance >= 0.8*maxRel) {
 					keep = append(keep, c)
 				}
@@ -716,7 +740,16 @@ func (s *SQLiteStore) expandEdges(ctx context.Context, scoreMap map[string]*cont
 					if !isContradiction && propagated > 0.3 {
 						propagated = 0.3
 					}
-					scoreMap[neighborID] = &contextCandidate{memory: *m, score: propagated, reserved: isReserved}
+					// viaEdge is deliberately NOT set for relates_to arrivals.
+					// relates_to is itself a similarity claim, so a relevance
+					// floor legitimately applies to it — and on a store with tens
+					// of thousands of auto-linked near-duplicate edges, exempting
+					// it would re-admit exactly the sibling glut the floor
+					// happens to suppress. Typed relations assert something that
+					// is not similarity; those are the ones the floor must not
+					// judge.
+					structural := expansionDirectionsFor(edge.Rel).Handling != handleBackground
+					scoreMap[neighborID] = &contextCandidate{memory: *m, score: propagated, reserved: isReserved, viaEdge: structural}
 					originalScores[neighborID] = 0 // no direct score
 					totalExpanded++
 					// This neighbour may itself seed the next hop. Its propagated
