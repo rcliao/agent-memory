@@ -114,3 +114,74 @@ the one change with a real, present failure mode behind it and near-zero cost.
 S2 is the interesting one long-term because it attacks restatement drift at
 the write path, but it needs a new-subcommand approval. S3–S5 ride along.
 Pack-validate is a shell backlog item, not a ghost change.
+
+---
+
+## Part 2 — the scoping and task model behind `mem` (2026-08-08)
+
+The first pass compared the storage surface. Probing the binary's validation
+strings answers the deeper question: where did buzz's complexity GO, if not
+into retrieval?
+
+### Memory is a few governed documents, not a corpus
+
+Slugs are `core` or `mem/<name>` (`[a-z0-9][a-z0-9_-]*`, ≤64 bytes). Each slug
+is explicitly "a single virtual file" — `mem patch` rejects multi-file diffs —
+and `core` carries a mandatory `profile` field and cannot be tombstoned. So
+NIP-AE's mental model is a handful of markdown-ish documents per agent, edited
+by diff under CAS: the CLAUDE.md model, not a searchable memory store. There
+is no retrieval question because the entire memory is small enough to load.
+
+### Scope is cryptographic, three ways at once
+
+Every engram event is structurally validated on the relay side:
+
+- signed by the **agent** pubkey (`pubkey != expected_agent` rejection),
+- addressed to the **owner** via p-tag (`p tag != expected_owner`),
+- slug bound to the addressable d-tag by re-derivation
+  (`body slug does not re-derive to d tag`).
+
+So the unit of scope is the (owner, agent, slug) triple, and none of the three
+can be spoofed. Ghost's equivalent is a namespace string plus filesystem
+permissions; shell hardens it socially with one SQLite file per agent.
+
+### The capability split is the interesting part
+
+`BUZZ_AUTH_TAG` (NIP-OA) makes agent-vs-owner a property of the signature, not
+of convention: an agent "signs as itself, so it can only ever satisfy the self
+path (target == signer), not the owner-of-agent path." Owner actions —
+archiving an identity (NIP-IA kinds 9035/9036), approving an agent update —
+are unforgeable by construction. Agent creation and edits flow through
+`agents draft-create / draft-update`, which open a prefilled form in the
+OWNER's desktop: agents propose, the owner approves.
+
+Ghost's analogue is the `locked` tag + `--unlock`, which is caller-side
+discipline; shell's analogue is that papi owns the config files and reviews
+evolve changes. Same pattern, enforced at different layers.
+
+### Task design: workflows with human gates, not an agent task store
+
+There is no per-agent task memory. Tasks live as channel-scoped YAML
+`workflows` with `runs` and explicit human `approve`/`deny` steps, plus a
+`feed` with a `needs_action` type. Shell already evaluated and declined this
+(`PLAN-BUZZ-DECISION.md`): the queue ledger covers it, and adopting the
+workflow framing risked rebuilding the `agent.task` kind retired 2026-08-07.
+
+### What this changes about the verdict
+
+Nothing about adoption, but it sharpens the comparison: **buzz spent its
+sophistication on WHO may write — ghost spends it on WHAT to retrieve.** The
+two systems are complementary answers to different halves of agent memory.
+Three residual notes:
+
+1. The (owner, agent) pair as a first-class data-model concept formalizes what
+   shell does socially. For a single-household deployment with both daemons
+   holding the key, the cryptography buys nothing — but the *shape* (agent
+   proposes, owner approves identity changes) independently validates shell's
+   evolve-review pattern.
+2. `core` ≈ ghost's pinned+locked contract; ghost's is richer (lifecycle
+   immunity, retained version history), so nothing to take.
+3. The virtual-file model is the strongest argument yet for S2: buzz gets
+   clean diff-based editing *because* it treats a memory as a document. Ghost
+   treats memories as opaque values; a `ghost patch` would import the
+   ergonomics without importing the architecture.
