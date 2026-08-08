@@ -157,6 +157,22 @@ func (s *SQLiteStore) Put(ctx context.Context, p PutParams) (*model.Memory, erro
 		 WHERE ns = ? AND key = ? AND deleted_at IS NULL
 		 ORDER BY version DESC LIMIT 1`, p.NS, p.Key).Scan(&prevID, &prevVersion)
 
+	// Compare-and-swap: the caller edited a specific version and asks that the
+	// write land only if that is still the head. The check sits inside the
+	// immediate transaction, after the head read, so it is race-free by the
+	// same serialization that keeps the version chain gapless
+	// (TestConcurrentSameKeyVersionChain). A BaseVersion against a missing key
+	// is also a conflict — the caller claims to be editing something that is
+	// not there, and "create it fresh" would be exactly the silent divergence
+	// CAS exists to prevent.
+	if p.BaseVersion > 0 {
+		current := prevVersion // 0 when the key has no live head
+		if current != p.BaseVersion {
+			return nil, fmt.Errorf("%s/%s: write expected version %d but head is %d: %w",
+				p.NS, p.Key, p.BaseVersion, current, ErrVersionConflict)
+		}
+	}
+
 	version := 1
 	var supersedes *string
 	if err == nil {

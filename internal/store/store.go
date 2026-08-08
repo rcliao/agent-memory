@@ -3,10 +3,17 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/rcliao/ghost/internal/model"
 )
+
+// ErrVersionConflict is returned by Put when BaseVersion is set and no longer
+// matches the key's live head — another writer got there first. Callers should
+// re-read, remake their edit against the fresh version, and retry; check with
+// errors.Is.
+var ErrVersionConflict = errors.New("version conflict")
 
 // PutParams holds parameters for storing a memory.
 type PutParams struct {
@@ -28,6 +35,16 @@ type PutParams struct {
 	// `locked` tag (the read-only bit — see locked.go). Callers pass it
 	// explicitly (CLI --unlock) for owner-initiated edits only.
 	Unlock bool
+	// BaseVersion, when non-zero, makes the write compare-and-swap: it must
+	// equal the key's current live version or Put fails with
+	// ErrVersionConflict instead of silently burying a concurrent edit.
+	// Zero preserves unconditional last-write-wins, which mechanical writers
+	// (capture, reflect, session summaries) rely on. Modelled on buzz mem's
+	// `patch --base-hash` (docs/research/buzz-nip-ae-memory-comparison.md);
+	// version is used instead of a content hash because ghost already tracks
+	// it monotonically and Get returns it, so the read-edit-write loop needs
+	// no extra hashing step.
+	BaseVersion int
 }
 
 // FileParam specifies a file to link to a memory.

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -187,12 +188,13 @@ func TestConcurrentPutAndDelete(t *testing.T) {
 	}
 }
 
-// L3: the documented lost update. Two writers read the same version, both
-// write; the second silently buries the first. This test PASSES — it is the
-// executable record of today's unsafe-by-design behaviour, and the red test
-// for CAS-on-version is its inverse: when PutParams grows BaseVersion, flip
-// this to assert the stale writer FAILS.
-func TestLostUpdateWithoutCAS(t *testing.T) {
+// L3, both halves. Without BaseVersion, last write wins and the first edit is
+// silently buried — that stays, deliberately, as backwards compatibility: the
+// daemon's mechanical writers never carry a base version and must not start
+// failing. WITH BaseVersion, a stale writer gets a typed conflict instead of
+// silently burying the other's edit — the CAS the buzz read argued for (S1),
+// and the inversion this test's earlier form promised.
+func TestCASOnVersion(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -206,26 +208,47 @@ func TestLostUpdateWithoutCAS(t *testing.T) {
 	if a[0].Version != 1 || b[0].Version != 1 {
 		t.Fatalf("setup: both readers should see v1")
 	}
-	// A commits an edit; then B commits an edit made against the same v1.
-	if _, err := s.Put(ctx, PutParams{NS: "agent:conc", Key: "plan",
+
+	// A commits against v1 and wins the race.
+	if _, err := s.Put(ctx, PutParams{NS: "agent:conc", Key: "plan", BaseVersion: 1,
 		Content: "Meet at the north entrance at ten — gate B, not the main gate.", Kind: "semantic", Tier: "stm"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Put(ctx, PutParams{NS: "agent:conc", Key: "plan",
-		Content: "Meet at the north entrance at HALF PAST ten.", Kind: "semantic", Tier: "stm"}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("A's CAS write against the current version must succeed: %v", err)
 	}
 
+	// B commits an edit made against the same v1 — stale now. Must FAIL with a
+	// typed error, not silently bury A's gate correction.
+	_, err := s.Put(ctx, PutParams{NS: "agent:conc", Key: "plan", BaseVersion: 1,
+		Content: "Meet at the north entrance at HALF PAST ten.", Kind: "semantic", Tier: "stm"})
+	if err == nil {
+		t.Fatalf("B's stale write (base v1, head is v2) succeeded — the lost update is back")
+	}
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("conflict must be the typed ErrVersionConflict so callers can retry; got: %v", err)
+	}
 	head, _ := s.Get(ctx, GetParams{NS: "agent:conc", Key: "plan"})
-	if !strings.Contains(head[0].Content, "HALF PAST") {
-		t.Fatalf("expected B's write to win")
+	if !strings.Contains(head[0].Content, "gate B") {
+		t.Fatalf("A's edit must survive B's rejected write")
 	}
-	if strings.Contains(head[0].Content, "gate B") {
-		t.Fatalf("expected A's edit to be buried")
+
+	// B re-reads, remakes the edit against v2, retries — the loop a conflict
+	// is supposed to trigger.
+	if _, err := s.Put(ctx, PutParams{NS: "agent:conc", Key: "plan", BaseVersion: head[0].Version,
+		Content: "Meet at the north entrance at HALF PAST ten — gate B, not the main gate.", Kind: "semantic", Tier: "stm"}); err != nil {
+		t.Fatalf("B's retry against the fresh version must succeed: %v", err)
 	}
-	t.Log("CONFIRMED: last write wins; A's gate correction is silently buried in history. " +
-		"No error, no conflict signal, nothing tells either writer. This is the failure " +
-		"CAS-on-version (S1) exists to catch — when it lands, invert this test.")
+
+	// BaseVersion on a key that does not exist is also a conflict: the caller
+	// claims to be editing something that is not there.
+	if _, err := s.Put(ctx, PutParams{NS: "agent:conc", Key: "never-written", BaseVersion: 3,
+		Content: "Edit of a ghost.", Kind: "semantic", Tier: "stm"}); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("BaseVersion against a missing key must conflict, got: %v", err)
+	}
+
+	// And zero stays exactly today's behaviour: no check, last write wins.
+	if _, err := s.Put(ctx, PutParams{NS: "agent:conc", Key: "plan",
+		Content: "Plan replaced wholesale by a mechanical writer.", Kind: "semantic", Tier: "stm"}); err != nil {
+		t.Fatalf("BaseVersion 0 must keep unconditional-write behaviour: %v", err)
+	}
 }
 
 // L4: the dedup check-then-act race. Put's duplicate probes (exact content,
