@@ -42,6 +42,45 @@ type edgeDirections struct {
 	// through. A meaning-bearing relation should not lose a slot to a
 	// similarity score.
 	Priority int
+	// Handling is what retrieval owes the neighbour once it has been reached.
+	// Direction decides whether a neighbour is REACHABLE; handling decides
+	// whether it SURVIVES a contested budget, which measurement shows are
+	// completely different questions — with direction fixed, 9/10 relations
+	// traverse at a generous budget and only 2/10 still arrive at 250 tokens.
+	Handling edgeHandling
+}
+
+// edgeHandling classifies a relation by what breaks when its neighbour is
+// missing from the assembled context.
+//
+// Expressed as reservation tiers rather than score adjustments, because score
+// is not a working lever here. Three attempts to lift a neighbour by score all
+// failed (finding 4 in eval_graph_test.go): the edge-only cap never binds, a
+// score floor gets clamped by that cap, and even both together lose until the
+// floor exceeds ~0.9x the seed's own score. `contradicts` does not out-SCORE
+// the near-duplicate wall either — it scores 0.3912 against fillers at 0.4373
+// and arrives anyway, because reserved budget bypasses score order entirely.
+type edgeHandling int
+
+const (
+	// handleBackground: ordinary candidate, competes on score. The default.
+	handleBackground edgeHandling = iota
+	// handleNever: an audit trail. Not traversed at all.
+	handleNever
+	// handleAccompany: worth surfacing when there is room, not worth taking
+	// budget from a direct hit. The answer is incomplete without it, not wrong.
+	handleAccompany
+	// handleSubstitute: has its own packing path (parent replaces children
+	// under pressure); handled outside the reservation mechanism.
+	handleSubstitute
+	// handleReserve: claims budget ahead of greedy packing. Reserved for
+	// relations whose absence makes the agent assert something false or unsafe.
+	handleReserve
+)
+
+// reservesBudget reports whether a relation's neighbours claim reserved budget.
+func reservesBudget(rel string) bool {
+	return expansionDirectionsFor(rel).Handling == handleReserve
 }
 
 // edgeExpansionPolicies is deliberately conservative: incoming traversal is
@@ -66,21 +105,41 @@ type edgeDirections struct {
 //     effects, and pulling all of them in is noise, not context.
 //   - merged_into — an audit trail, never traversed (weight 0, also excluded
 //     in SQL).
+//
+// The Handling column is deliberately scarce. Reserved budget is taken from
+// direct search hits, so promoting a relation into handleReserve makes every
+// query slightly worse in exchange for never missing that relation. Three
+// relations qualify, each because its absence makes the agent say something
+// actively wrong rather than merely incomplete:
+//
+//   - contradicts — states a corrected fact as though it were current.
+//   - prevents    — recommends the thing that is ruled out. This is the allergy
+//     shape, and ghost has already lost a correct allergy fact from view once.
+//   - depends_on  — recommends an action that will fail for want of its
+//     prerequisite. "Deploy the service" without "the migration is manual" is
+//     not a partial answer, it is a broken instruction.
+//
+// caused_by, implies and refines are handleAccompany: without them the answer
+// is thinner, but nothing in it is false.
 var edgeExpansionPolicies = map[string]edgeDirections{
 	// A contradiction is the one thing an agent must never miss, so it takes
 	// a slot ahead of everything else.
-	"contradicts": {Outgoing: true, Incoming: true, Priority: 3},
-	// Relations that carry explicit meaning, curated or inferred.
-	"refines":    {Outgoing: true, Incoming: true, Priority: 2},
-	"depends_on": {Outgoing: true, Priority: 2},
-	"caused_by":  {Outgoing: true, Priority: 2},
-	"prevents":   {Outgoing: true, Priority: 2},
-	"implies":    {Outgoing: true, Priority: 2},
-	"contains":   {Outgoing: true, Priority: 2},
+	"contradicts": {Outgoing: true, Incoming: true, Priority: 3, Handling: handleReserve},
+	// Acting on these without their neighbour produces a wrong instruction.
+	"depends_on": {Outgoing: true, Priority: 2, Handling: handleReserve},
+	"prevents":   {Outgoing: true, Priority: 2, Handling: handleReserve},
+	// Relations that carry explicit meaning but whose absence only thins the
+	// answer.
+	"refines":   {Outgoing: true, Incoming: true, Priority: 2, Handling: handleAccompany},
+	"caused_by": {Outgoing: true, Priority: 2, Handling: handleAccompany},
+	"implies":   {Outgoing: true, Priority: 2, Handling: handleAccompany},
+	// Parent summaries substitute for their children during packing rather than
+	// competing with them; see substituteParents.
+	"contains": {Outgoing: true, Priority: 2, Handling: handleSubstitute},
 	// Generic similarity, auto-linked in bulk. Last in line by design: it is
 	// the most numerous relation and the least informative.
-	"relates_to":  {Outgoing: true, Incoming: true, Priority: 1},
-	"merged_into": {},
+	"relates_to":  {Outgoing: true, Incoming: true, Priority: 1, Handling: handleBackground},
+	"merged_into": {Handling: handleNever},
 }
 
 // expansionDirectionsFor returns the policy for a relation. Unknown relations
