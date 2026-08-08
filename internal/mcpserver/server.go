@@ -45,6 +45,7 @@ Memory kinds (Tulving's taxonomy, affects retrieval scoring):
 Priority: low, normal (default), high, critical.
 Tier (Atkinson-Shiffrin model): sensory (ultra-short, aggressive decay), stm (default, subject to decay), ltm (proven useful, long-term).
 Pinned: set pinned=true for memories that should always be loaded in context (e.g. identity, core conventions). Pinned memories are exempt from lifecycle decay.
+Provenance: when a memory records what a PERSON said, prefers, or did, set source_user to that person and source_kind to how you know it (stated | observed | self | peer). A stated preference outranks your own inference about the same person. The chat is a channel, not provenance — keep chat ids in tags.
 
 Retrieval flow:
 - ghost_context: start here — assembles scored context within a token budget. Summaries replace their children automatically. When compaction_suggested is true, use ghost_expand to find what needs consolidation.
@@ -139,6 +140,8 @@ func registerTools(server *mcp.Server, st store.Store) {
 			"pinned":       prop("boolean", "If true, always loaded in context and exempt from lifecycle decay"),
 			"ttl":          prop("string", "Time-to-live, e.g. 7d, 24h, 30m"),
 			"dedup":        prop("boolean", "If true, skip storing when a semantically similar memory already exists (cosine > 0.82)"),
+			"source_user":  prop("string", "The PERSON this memory originated from (e.g. the family member who said it). NOT the chat — a chat is a channel and belongs in tags. Set this whenever a memory records what someone said, prefers, or did; it is how you later fit responses to that person and how junk stays attributable."),
+			"source_kind":  prop("string", "How it entered the store: 'stated' (the person explicitly said it — highest authority), 'observed' (you inferred it from behaviour), 'self' (your own note to yourself), 'peer' (came from another agent)"),
 			"base_version": prop("number", "Compare-and-swap: the version you read before editing (from ghost_get). The write fails with a version-conflict error if another writer moved the key past it — re-read, remake your edit against the fresh content, retry. Omit or 0 for an unconditional write. Use this whenever you EDIT an existing memory rather than append a new one."),
 		}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -155,6 +158,8 @@ func registerTools(server *mcp.Server, st store.Store) {
 			TTL        string   `json:"ttl"`
 			Dedup      bool     `json:"dedup"`
 			BaseVer    float64  `json:"base_version"`
+			SourceUser string   `json:"source_user"`
+			SourceKind string   `json:"source_kind"`
 		}
 		if err := unmarshalArgs(req, &p); err != nil {
 			return errResult(err.Error()), nil
@@ -175,6 +180,8 @@ func registerTools(server *mcp.Server, st store.Store) {
 			TTL:         p.TTL,
 			Dedup:       p.Dedup,
 			BaseVersion: int(p.BaseVer),
+			SourceUser:  p.SourceUser,
+			SourceKind:  p.SourceKind,
 		})
 		if err != nil {
 			return errResult(err.Error()), nil

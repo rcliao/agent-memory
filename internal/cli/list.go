@@ -17,6 +17,7 @@ func init() {
 	}
 
 	cmd.Flags().StringP("ns", "n", "", "Filter by namespace (supports prefix: 'ns:*')")
+	cmd.Flags().String("source-user", "", "Filter to memories originating from this person")
 	cmd.Flags().String("kind", "", "Filter by kind")
 	cmd.Flags().StringP("tags", "t", "", "Filter by tags (comma-separated)")
 	cmd.Flags().IntP("limit", "l", 20, "Max results")
@@ -51,11 +52,13 @@ func runList(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	sourceUser, _ := cmd.Flags().GetString("source-user")
 	memories, err := st.List(cmd.Context(), store.ListParams{
-		NS:    ns,
-		Kind:  kind,
-		Tags:  tags,
-		Limit: limit,
+		NS:         ns,
+		Kind:       kind,
+		Tags:       tags,
+		Limit:      limit,
+		SourceUser: sourceUser,
 	})
 	if err != nil {
 		exitErr("list", err)

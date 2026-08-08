@@ -23,6 +23,12 @@ type Memory struct {
 	Importance     float64    `json:"importance"`
 	UtilityCount   int        `json:"utility_count"`
 	Tier           string     `json:"tier"`
+	// SourceUser is the PERSON this memory originated from ("mami", "papi") —
+	// not the chat, which is a channel and belongs in tags. Empty = unknown.
+	SourceUser string `json:"source_user,omitempty"`
+	// SourceKind is how it entered the store: stated (the person said it),
+	// observed (agent inference), self (agent's own note), peer (another agent).
+	SourceKind string `json:"source_kind,omitempty"`
 	Pinned         bool       `json:"pinned"`
 	EstTokens      int        `json:"est_tokens"`
 	ChunkCount     int        `json:"chunks,omitempty"`
