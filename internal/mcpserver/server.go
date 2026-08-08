@@ -49,6 +49,16 @@ Retrieval flow:
 - ghost_get: retrieve a specific memory by key when you already know it.
 - ghost_consolidate: create a summary that groups related memories. Children are suppressed in future context calls.
 
+Relationships (edges) — the most under-used part of ghost:
+Memories are a graph, not a list. When a seed memory is retrieved, its neighbours are pulled in with it, so an edge is how you make sure a fact arrives WITH the thing that qualifies it. Three relations reserve budget and still arrive when context is tight; reach for them when the neighbour's absence would make you state something FALSE:
+- contradicts — the newer, correcting memory points at the stale one. Without it you assert a corrected fact as current.
+- depends_on  — the task points at its PREREQUISITE. Without it you recommend an action that will fail.
+- prevents    — the thing being ruled out points at the CONSTRAINT ruling it out (allergies, restrictions, hard rules).
+caused_by / implies / refines are surfaced when there is room. relates_to is auto-created for you — never hand-write it, and never label ordinary "same topic" similarity as a typed relation, because that takes reserved budget from real search results.
+Direction is not cosmetic: an edge written the wrong way round is stored, looks correct, and is silently ignored during retrieval. Read it as a sentence, "from <rel> to".
+- ghost_edge: create one edge you already know about.
+- ghost_edge_candidates: ghost lists similar pairs that have no typed edge yet; you classify each one and commit the ones that warrant it. This is the intended way to build the graph — ghost does no LLM work itself.
+
 Consolidation workflow (when compaction_suggested is true):
 1. ghost_expand(ns) — see existing nodes + clusters needing consolidation
 2. For each cluster: ghost_get each key to read content, write a summary
@@ -149,8 +159,8 @@ func registerTools(server *mcp.Server, st store.Store) {
 		if p.Dedup && mem.Key != p.Key {
 			type putResult struct {
 				*model.Memory
-				Deduplicated    bool   `json:"deduplicated"`
-				RequestedKey    string `json:"requested_key"`
+				Deduplicated bool   `json:"deduplicated"`
+				RequestedKey string `json:"requested_key"`
 			}
 			return jsonResult(putResult{Memory: mem, Deduplicated: true, RequestedKey: p.Key})
 		}
@@ -287,7 +297,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 	})
 
 	server.AddTool(&mcp.Tool{
-		Name:        "ghost_edge",
+		Name: "ghost_edge",
 		Description: "Create, remove, or list weighted edges (associations) between memories. Edges enable DAG-based retrieval — when a seed memory is found, its neighbours are pulled in via spreading activation.\n\n" +
 			"DIRECTION IS NOT COSMETIC. An edge written the wrong way round is silently inert: it is stored, it looks correct in `list`, and it never influences retrieval. Nothing warns you. Read the edge as a sentence 'from <rel> to':\n" +
 			"  from --contradicts--> to  the NEW/correcting memory points at the stale one it refutes\n" +
@@ -299,7 +309,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			"  from --contains-->    to  the parent summary points at each CHILD it covers\n" +
 			"  relates_to is symmetric; merged_into is a dedup audit trail and is never traversed.\n\n" +
 			"WHICH RELATION TO REACH FOR. contradicts, depends_on and prevents are the high-value ones: retrieval reserves budget for them, so they still reach the agent when context is tight. Use them when their ABSENCE would make you state something false — a corrected fact asserted as current, an action recommended without its blocker, a suggestion that violates a standing constraint (allergies, restrictions, hard rules). caused_by/implies/refines are surfaced when there is room. Do not reach for a typed relation when 'these two are about the same topic' is the truth — that is relates_to, and mislabelling it takes reserved budget away from real search results.\n\n" +
-			"Expansion is SINGLE-HOP: a prerequisite of a prerequisite is not reached. Link the memory a query will actually find directly to every blocker that matters.",
+			"DEPTH: chains are followed two links deep for depends_on, prevents and caused_by — so 'book the dentist' -> 'the card lapsed' -> 'the form is unsigned' reaches the unsigned form, which is the only actionable part. Everything else, including relates_to and contradicts, is single-hop: what you want is the contradiction of a fact in context, not the contradiction of that contradiction. Beyond two links nothing is reached, so for a long chain link the memory a query will actually find directly to the blocker that matters.",
 		InputSchema: schema([]string{"ns", "from_key"}, map[string]map[string]any{
 			"ns":       prop("string", "Namespace (used for both from and to)"),
 			"from_key": prop("string", "Source memory key"),
@@ -470,7 +480,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 	})
 
 	server.AddTool(&mcp.Tool{
-		Name: "ghost_edge_candidates",
+		Name:        "ghost_edge_candidates",
 		Description: "Return relates_to pairs that do not yet have a typed reasoning edge, so YOU (the calling LLM agent) can classify each one and commit edges via ghost_edge. Ghost itself does zero LLM work — this tool just reads the graph. Workflow: call this → read the returned pairs → for each pair, decide in your own reasoning whether it's caused_by / prevents / implies / none → call ghost_edge(rel=<decision>) for pairs that warrant a reasoning edge. Skip pairs where 'relates_to' (topical only) is already accurate. Pairs that already have a reasoning edge are excluded automatically (safe to re-run).",
 		InputSchema: schema([]string{"ns"}, map[string]map[string]any{
 			"ns":        prop("string", "Namespace to scan (required)"),

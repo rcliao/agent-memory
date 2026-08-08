@@ -1,5 +1,10 @@
 package store
 
+import (
+	"os"
+	"strconv"
+)
+
 // ── Per-relation expansion policy ────────────────────────────────
 //
 // Spreading activation used to traverse OUTGOING edges only: the SQL filtered
@@ -48,6 +53,52 @@ type edgeDirections struct {
 	// completely different questions — with direction fixed, 9/10 relations
 	// traverse at a generous budget and only 2/10 still arrive at 250 tokens.
 	Handling edgeHandling
+	// MaxHops is how many links of THIS relation spreading activation may
+	// follow away from a seed. 1 (the default) reproduces the original
+	// single-hop behaviour.
+	//
+	// A chain is the whole point of having a graph: "book the dentist"
+	// depends_on "the card lapsed" depends_on "the form is unsigned", where only
+	// the far end is actionable. At depth 1 ghost stores chains it cannot
+	// follow. But depth is not safe to grant globally — `relates_to` is 76,738
+	// of ~80,000 live edges, auto-linked in bulk, with measured degree up to 39
+	// inside a single near-duplicate component, so a second hop over it is a
+	// second-order neighbourhood in the thousands. Depth is therefore a property
+	// of the relation, like direction: meaning-bearing relations earn it,
+	// generic similarity does not.
+	MaxHops int
+}
+
+// hopsFor returns how deep a relation may be followed, defaulting to 1.
+func hopsFor(rel string) int {
+	if h := expansionDirectionsFor(rel).MaxHops; h > 0 {
+		return h
+	}
+	return 1
+}
+
+// maxHopsConfigured is how many breadth-first rounds expansion runs — the
+// deepest any single relation is allowed to go. Derived from the policy table
+// so granting a relation more depth needs no change to the traversal loop; the
+// per-relation gate inside that loop still decides which edges may be followed
+// in each round.
+//
+// GHOST_EDGE_MAX_HOPS overrides it, and is authoritative in both directions so
+// that setting it to 1 is a complete rollback to single-hop behaviour without
+// a redeploy.
+func maxHopsConfigured() int {
+	if v := os.Getenv("GHOST_EDGE_MAX_HOPS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			return n
+		}
+	}
+	deepest := 1
+	for rel := range edgeExpansionPolicies {
+		if h := hopsFor(rel); h > deepest {
+			deepest = h
+		}
+	}
+	return deepest
 }
 
 // edgeHandling classifies a relation by what breaks when its neighbour is
@@ -124,14 +175,25 @@ func reservesBudget(rel string) bool {
 var edgeExpansionPolicies = map[string]edgeDirections{
 	// A contradiction is the one thing an agent must never miss, so it takes
 	// a slot ahead of everything else.
+	// Depth 1 on purpose. What an agent needs is the refutation of something in
+	// context, not the refutation of that refutation — a chain of corrections
+	// resolves to its newest link, and pulling the intermediate ones back in
+	// re-surfaces exactly the superseded claims the graph exists to suppress.
+	// Measured too: `contradicts` is the only reserve-class relation that
+	// actually exists in production (386 edges), so granting it depth changed 9
+	// of 12 sampled live contexts — real churn, for a semantics nobody asked for.
 	"contradicts": {Outgoing: true, Incoming: true, Priority: 3, Handling: handleReserve},
-	// Acting on these without their neighbour produces a wrong instruction.
-	"depends_on": {Outgoing: true, Priority: 2, Handling: handleReserve},
-	"prevents":   {Outgoing: true, Priority: 2, Handling: handleReserve},
+	// Acting on these without their neighbour produces a wrong instruction, and
+	// they are the relations that genuinely chain — a prerequisite has
+	// prerequisites, a constraint has causes. Depth 2 covers the realistic
+	// chain without letting traversal wander.
+	"depends_on": {Outgoing: true, Priority: 2, Handling: handleReserve, MaxHops: 2},
+	"prevents":   {Outgoing: true, Priority: 2, Handling: handleReserve, MaxHops: 2},
 	// Relations that carry explicit meaning but whose absence only thins the
-	// answer.
+	// answer. caused_by chains (a cause has a cause); refines and implies are
+	// left at depth 1 until something measures a need.
 	"refines":   {Outgoing: true, Incoming: true, Priority: 2, Handling: handleAccompany},
-	"caused_by": {Outgoing: true, Priority: 2, Handling: handleAccompany},
+	"caused_by": {Outgoing: true, Priority: 2, Handling: handleAccompany, MaxHops: 2},
 	"implies":   {Outgoing: true, Priority: 2, Handling: handleAccompany},
 	// Parent summaries substitute for their children during packing rather than
 	// competing with them; see substituteParents.
