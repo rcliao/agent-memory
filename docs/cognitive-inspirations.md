@@ -246,6 +246,18 @@ ReMe's utility-based evaluation inspired ghost's `utility_count` / `access_count
 
 ---
 
+## Source Monitoring → Write Provenance
+
+Human memory does not store source tags — it reconstructs source at retrieval,
+and fails at it constantly (source amnesia, misattribution, the misinformation
+effect). Ghost inverts this: provenance (`source_user`, `source_kind`) is
+recorded at encoding by the writer and never reconstructed or guessed. The full
+conceptual grounding, including the authority ladder and the in-house
+replication of the misinformation effect, lives in
+[provenance-and-memory.md](provenance-and-memory.md).
+
+---
+
 ## Summary: What We Borrowed vs. Where We Diverge
 
 | Inspiration | What ghost does | Where ghost diverges |
