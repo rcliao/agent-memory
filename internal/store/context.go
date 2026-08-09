@@ -74,6 +74,13 @@ type ContextParams struct {
 	MinScore        float64              // absolute score floor; candidates below this are dropped (0 = no filter)
 	MinSpread       float64              // top-1 must exceed top-N by this delta (0 = no filter). Catches "flat noise" queries where retrieval couldn't discriminate.
 	Scope           *SessionScope        // optional: boost memories matching the current session window (chat tag, date tag, or since cutoff)
+	// ForUser is the person the agent is currently talking to. Memories whose
+	// source_user matches get a score boost — the interlocutor's own stated
+	// facts and preferences surface first when the budget is contested. A
+	// boost, never a filter: other people's facts stay retrievable (a standing
+	// instruction from one family member can matter mid-conversation with
+	// another). Empty = no effect, preserving prior behaviour exactly.
+	ForUser string
 }
 
 // ContextMemory is a scored memory for context output.
@@ -88,6 +95,12 @@ type ContextMemory struct {
 	// substitution (LCM compression under budget pressure). The caller can
 	// recover full detail via `ghost expand <key>` / ghost_expand.
 	SummaryOf []string `json:"summary_of,omitempty"`
+	// SourceUser/SourceKind carry write provenance into the assembled
+	// context so the renderer and the agent can attribute: "[mami, stated]"
+	// vs "[inferred]". The agent is the one component that can already apply
+	// the authority ladder — it just needs to see which is which.
+	SourceUser string `json:"source_user,omitempty"`
+	SourceKind string `json:"source_kind,omitempty"`
 }
 
 // ContextResult is the assembled context response.
@@ -159,11 +172,13 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			}
 			if usedTokens+memTokens <= pinBudget {
 				result.Memories = append(result.Memories, ContextMemory{
-					NS:      m.NS,
-					Key:     m.Key,
-					Kind:    m.Kind,
-					Content: m.Content,
-					Score:   m.Importance, // pinned memories use importance as score
+					NS:         m.NS,
+					Key:        m.Key,
+					Kind:       m.Kind,
+					Content:    m.Content,
+					Score:      m.Importance, // pinned memories use importance as score
+					SourceUser: m.SourceUser,
+					SourceKind: m.SourceKind,
 				})
 				usedTokens += memTokens
 				seen[m.ID] = true
@@ -522,13 +537,15 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 
 		if usedTokens+memTokens <= budget {
 			result.Memories = append(result.Memories, ContextMemory{
-				NS:        c.memory.NS,
-				Key:       c.memory.Key,
-				Kind:      c.memory.Kind,
-				Content:   content,
-				Score:     math.Round(c.score*100) / 100,
-				Excerpt:   isExcerpt,
-				SummaryOf: substituted[c.memory.ID],
+				NS:         c.memory.NS,
+				Key:        c.memory.Key,
+				Kind:       c.memory.Kind,
+				Content:    content,
+				Score:      math.Round(c.score*100) / 100,
+				Excerpt:    isExcerpt,
+				SummaryOf:  substituted[c.memory.ID],
+				SourceUser: c.memory.SourceUser,
+				SourceKind: c.memory.SourceKind,
 			})
 			usedTokens += memTokens
 		} else if remainingTokens := budget - usedTokens; remainingTokens >= 25 {
@@ -540,12 +557,14 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			}
 			excerptTokens := (len(excerpt) / 4) + 20
 			result.Memories = append(result.Memories, ContextMemory{
-				NS:      c.memory.NS,
-				Key:     c.memory.Key,
-				Kind:    c.memory.Kind,
-				Content: excerpt,
-				Score:   math.Round(c.score*100) / 100,
-				Excerpt: true,
+				NS:         c.memory.NS,
+				Key:        c.memory.Key,
+				Kind:       c.memory.Kind,
+				Content:    excerpt,
+				Score:      math.Round(c.score*100) / 100,
+				Excerpt:    true,
+				SourceUser: c.memory.SourceUser,
+				SourceKind: c.memory.SourceKind,
 			})
 			usedTokens += excerptTokens
 			break
