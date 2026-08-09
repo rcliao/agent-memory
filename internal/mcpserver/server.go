@@ -263,6 +263,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			"exclude_pinned": prop("boolean", "Skip pinned memories, use full budget for search-ranked results"),
 			"min_score":      prop("number", "Absolute score floor (0-1). Drop candidates below this. 0 = no filter. Helpful at scale to suppress low-confidence retrievals."),
 			"min_spread":     prop("number", "If top-1 score minus top-5 score is less than this delta, collapse to top-1 only (flat-noise detection). 0 = no filter. ~0.15 is a good starting value."),
+			"for_user":       prop("string", "The person you are currently talking to. Memories they originated (source_user match) get a boost so their own stated facts and preferences surface first under a tight budget. A boost, never a filter — other people's facts stay retrievable."),
 		}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var p struct {
@@ -273,6 +274,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			Budget        int      `json:"budget"`
 			ExcludePinned bool     `json:"exclude_pinned"`
 			MinScore      float64  `json:"min_score"`
+			ForUser       string   `json:"for_user"`
 			MinSpread     float64  `json:"min_spread"`
 		}
 		if err := unmarshalArgs(req, &p); err != nil {
@@ -290,7 +292,8 @@ func registerTools(server *mcp.Server, st store.Store) {
 			ExcludePinned: p.ExcludePinned,
 			MinScore:      p.MinScore,
 			MinSpread:     p.MinSpread,
-		})
+
+			ForUser: p.ForUser})
 		if err != nil {
 			return errResult(err.Error()), nil
 		}
