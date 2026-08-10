@@ -44,7 +44,7 @@ Ghost is a persistent memory system for AI agents. Single binary, SQLite-backed,
 | `internal/embedding` | Pluggable embeddings (local all-MiniLM / Ollama / OpenAI) + local cross-encoder reranker | ~880 LOC |
 | `internal/chunker` | Markdown-aware text splitting (~400 char targets) | 193 LOC |
 | `internal/ingest` | Markdown file parser (H2 → sections → memories) | 154 LOC |
-| `internal/mcpserver` | MCP server over stdio (10 tools: put, get, search, context, expand, consolidate, curate, reflect, edge, edge_candidates) | ~556 LOC |
+| `internal/mcpserver` | MCP server over stdio (11 tools: put, get, search, context, expand, consolidate, curate, patch, reflect, edge, edge_candidates) | ~556 LOC |
 | `internal/dash` | Terminal dashboard for inspecting memory state | ~387 LOC |
 | `internal/model` | Core data types: `Memory`, `Chunk`, `FileRef` | 69 LOC |
 | `memory.go` | Public library API — re-exports from internal packages | ~102 LOC |
@@ -69,6 +69,8 @@ Memory {
   Version        int         // auto-incremented on update
   Supersedes     string      // ID of previous version
   Tags           []string    // first-class filtering (identity, lore, project:ghost, chat:123)
+  SourceUser     string      // the person this memory originated from (empty = unknown)
+  SourceKind     string      // how it entered the store: stated | observed | self | peer
   AccessCount    int         // incremented on every retrieval
   UtilityCount   int         // incremented when directly useful (query-hit, not edge passenger)
   Ease           float64     // spaced-repetition decay resistance (1.0 neutral; grows with utility)
@@ -281,11 +283,12 @@ Edges have their own lifecycle managed alongside memory nodes:
 
 ## MCP Server
 
-Exposes 10 tools over stdio transport using `github.com/modelcontextprotocol/go-sdk`:
+Exposes 11 tools over stdio transport using `github.com/modelcontextprotocol/go-sdk`:
 - `ghost_put` — Store/update a memory (auto-links similar via edges)
+- `ghost_patch` — Apply a unified diff to a memory's content, context-verified against the version it was generated from (safer than `ghost_put` for edits)
 - `ghost_get` — Retrieve a specific memory by namespace and key
 - `ghost_search` — Full-text search with ranking
-- `ghost_context` — Budget-aware context assembly with edge expansion (includes `compaction_suggested` signal; supports `min_score` / `min_spread` noise filters)
+- `ghost_context` — Budget-aware context assembly with edge expansion (includes `compaction_suggested` signal; supports `min_score` / `min_spread` noise filters and a `for_user` interlocutor boost)
 - `ghost_expand` — List consolidation nodes (no key) or drill into a summary to get its children (with key)
 - `ghost_consolidate` — Create a summary memory with contains edges to source memories in one operation
 - `ghost_curate` — Instance-level lifecycle actions on individual memories (promote, demote, boost, diminish, archive, delete, pin, unpin)
@@ -327,6 +330,7 @@ The public `Store` interface is a subset of the internal one — core CRUD, sear
 | Command | Description |
 |---------|-------------|
 | `put` | Store or update a memory |
+| `patch` | Apply a unified diff to a memory's content (safer than `put` for edits) |
 | `capture` | Extract + store memories from raw text using deterministic heuristics (no LLM). Also ingests LLM-produced candidates via `--json` |
 | `mine-procedures` | Induce recurring workflows from usage sequences (stdin) into procedural memories by frequency (no LLM) |
 | `get` | Retrieve by namespace + key |
