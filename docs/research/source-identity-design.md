@@ -1,193 +1,225 @@
 # Source identity: canonical person ids for provenance
 
-2026-08-10. Design one-pager. Follows `provenance-first-class.md` (position),
-`capture-to-storage-data-model.md` (write-path survey), and
-`../provenance-and-memory.md` (cognitive grounding). Motivated by the day-1
-production census in the Evidence appendix, which found two defects: person
-labels fragment across writers, and the interlocutor boost that was supposed
-to consume them was never actually implemented.
+2026-08-10 (restructured 2026-08-11 to the design-doc review template).
+Follows `provenance-first-class.md` (position), `capture-to-storage-data-model.md`
+(write-path survey), and `../provenance-and-memory.md` (cognitive grounding).
 
-## Intent
+## Problem
 
-Provenance answers *who* a memory came from — but "who" is currently a free
-string, and every writer invents its own spelling. The day-1 census found one
-person recorded under four labels: the full configured display label, the
-short given name, the same name lowercased, and a label-with-one-nickname
-variant. Exact-string matching therefore fails precisely on the curated
-canonical memories (written by the agent, which free-types names) — the
-memories the authority ladder exists to protect.
+Provenance answers *who* a memory came from — but `source_user` is a free
+string, and every writer invents its own spelling. The day-1 production
+census (2026-08-10) found one person recorded under four labels: the full
+configured display label, the short given name, the same name lowercased,
+and a label-with-one-nickname variant. 19 of 86 `stated` rows carry a
+variant, including the most safety-relevant curated canonical in the store.
 
-The fix cannot live in the caller. Shell can canonicalize the paths it
-controls, but the fragmentation came from the path it does not: the agent
-typing names into `ghost_put`. Any caller-side rule must be re-implemented by
-every writer (daemon, MCP agent, skill scripts, sync peers), and the writer
-that caused the problem is the one that cannot be trusted to follow it —
-guidance alone already lost this bet once with edge semantics.
+Exact-string matching therefore fails precisely where it matters: the
+interlocutor boost cannot join a person's conversation to their own curated
+facts, the `List --source-user` filter misses variant rows, and the future
+authority ladder (stated-beats-observed *for the same person*) has no
+reliable notion of "same person" to gate on.
 
-So source identity becomes ghost's job, with one constraint that keeps it on
-the right side of ghost's judgment/bookkeeping line: **ghost never infers
-that two labels are the same person.** Equivalence is *declared* (by the
-operator or agent) into an alias table; ghost only resolves through declared
-rows with exact (case-insensitive) lookup. Declared mapping is bookkeeping,
-like tags. Inference would be judgment — and the per-turn-LLM-classification
-lesson from shell (catastrophic in production, replaced by a mechanical
-pointer) applies verbatim.
+The census also found the boost itself was never implemented: `forUserBoost`
+exists only in PR #116's commit message, no code applies it, and the gating
+eval passes on main anyway — its corpus never forces a contested choice, so
+the gate never required the mechanism. The subsystem was born dead behind a
+false-green eval.
 
-Prior art agrees the source is an entity, not a string: W3C PROV models
-agents as first-class identities (`wasAttributedTo` points at an agent, not a
-label), and Zep/Graphiti resolve speakers to user entities before attributing
-facts.
+Affected: both family agents' retrieval quality (person-fit answers), the
+authority mechanism this whole workstream builds toward, and any future
+source management (merging duplicate identities, renaming a person). Today a
+label merge is impossible without rewriting memory rows, which the
+provenance design forbids — attribution is a historical record.
 
-## Components
+## Goals / Non-Goals
 
-- `internal/store/` — new `source_aliases` table, resolution helper, the
-  (actually implemented this time) `forUserBoost`, alias-aware `List` filter,
-  alias CRUD on the `Store` interface.
-- `internal/cli/` — new `ghost source` subcommand (alias management).
-- `internal/mcpserver/` — guidance naming the canonical ids; `for_user`
-  unchanged in shape.
-- shell (separate PR) — seed aliases from `user_labels` at startup; pass the
-  canonical short id as `ForUser` and as `source_user` on mechanical writes.
+Goals:
 
-Approvals (CONVENTIONS.md): new table, Store interface change, and new CLI
-subcommand approved by owner 2026-08-10.
+- One person resolves to one canonical id at every provenance read point,
+  regardless of which declared spelling a writer used.
+- The interlocutor boost actually exists, is canonical-aware, and is gated
+  by an eval that fails without it.
+- Merging or renaming a source is a reversible metadata operation with zero
+  memory-row rewrites.
+- Works for every writer, including the agent-authored MCP path that caller
+  side rules cannot reach.
 
-## Data flow
+Non-Goals:
 
-1. **Write — verbatim, forever.** Mami tells the agent a preference; the
-   daemon writes the memory with whatever label it has. The agent later
-   writes a curated canonical and free-types the short name. Both strings are
-   stored exactly as declared. `Put` never rewrites, normalizes, or resolves
-   `source_user` — attribution is a historical record (the suggestibility
-   principle from `provenance-and-memory.md`), and a mislabel stays visible
-   as evidence rather than being laundered into correctness.
-2. **Declare — once, reversibly.** The operator (or shell at startup, from
-   its `user_labels` config) declares: canonical id `mami`, aliases = the
-   long display label, the given name, known variants. A merge is inserting
-   an alias row; an unmerge is deleting it. No memory row changes in either
-   direction.
-3. **Resolve — at read, at the three points that care.**
-   - *Interlocutor boost*: a candidate gets `score *= forUserBoost` when
-     `canonical(memory.source_user) == canonical(params.ForUser)`. The boost
-     fires for the curated canonical written under the short name in a
-     conversation keyed by the long label — retroactively, the moment the
-     alias is declared.
-   - *List filter*: `--source-user mami` matches all declared variants.
-   - *Rendering*: `ContextMemory.source_user` stays verbatim (the record is
-     the record). Unifying display names is the caller's choice; ghost may
-     later expose `canonical_source_user` alongside, but not in this change.
-4. **Guide — so declaration stays ahead of drift.** MCP guidance tells the
-   agent the canonical ids exist and to use them; the census measures
-   compliance. But unlike the label-hygiene status quo, a variant that slips
-   through is now recoverable by declaration instead of unfixable.
+- No inferred identity: ghost never decides two labels are the same person;
+  equivalence is always declared.
+- No entity registry: no person metadata, no cross-namespace sharing.
+- No backfill or rewriting of stored `source_user` values.
+- The namespace-leak fix (agent writes to an undeclared namespace) and the
+  authority mechanism itself — separate changes; authority additionally
+  waits for this normalization.
 
-## Data model
+## Proposed Design
+
+Source identity becomes ghost's job, on the bookkeeping side of ghost's
+judgment/bookkeeping line: a **declared alias table**, resolved by exact
+(case-insensitive) lookup, never by inference.
 
 ```sql
 CREATE TABLE IF NOT EXISTS source_aliases (
-    ns        TEXT NOT NULL,
-    alias     TEXT NOT NULL COLLATE NOCASE,
-    canonical TEXT NOT NULL,
+    ns         TEXT NOT NULL,
+    alias      TEXT NOT NULL COLLATE NOCASE,
+    canonical  TEXT NOT NULL,
     created_at TEXT NOT NULL,
     PRIMARY KEY (ns, alias)
 );
 ```
 
-- Scoped per namespace: agents evolve independently; identity vocabularies
-  do too. No cross-namespace sharing.
-- Resolution is **one step**: `canonical(x)` = the row's `canonical` if an
-  alias row matches `x` case-insensitively, else `x` itself. Chains are
-  prevented at declaration time: inserting an alias whose canonical is
-  itself a declared alias is rejected with a suggestion to point at the
-  flattened target; symmetrically, declaring an alias whose *alias* string is
-  already in use as some row's canonical is rejected too — otherwise `mami`
-  could resolve to a new id while older rows' variants still resolve to
-  `mami`, splitting one person across two canonicals. (COLLATE NOCASE is
-  ASCII-only; that covers the observed
-  fragmentation, which is Latin-script name variants. CJK labels do not
-  case-fold and are unaffected.)
-- A canonical id is just a string with no row of its own — the table is a
-  mapping, not an entity registry. Person *facts* (birthdays, relationships)
-  are memories, not schema.
+The flow, end to end:
 
-## Interfaces
+```
+write (verbatim, forever)          declare (reversible)        read (resolved)
+Put{source_user:"<any label>"} --> ghost source alias X        Context(ForUser) boost
+   never normalized, never    <--     --canonical mami   -->   List --source-user
+   rewritten                       shell seeds from            (rendering stays
+                                   user_labels at startup       verbatim)
+```
 
-- Store: `SetSourceAlias(ctx, ns, alias, canonical)`,
-  `ListSourceAliases(ctx, ns)`, `DeleteSourceAlias(ctx, ns, alias)`;
-  `ContextParams.ForUser` and `ListParams.SourceUser` become alias-aware
-  internally (signatures unchanged).
-- CLI: `ghost source alias <alias> --canonical <id>`, `ghost source list`,
-  `ghost source rm <alias>` — all ns-scoped via the existing `--ns` flag.
-- MCP: no new tool yet (guidance first; a `ghost_source` tool ships only if
-  the census shows agents need self-service declaration). `ghost_put`
-  `source_user` description gains: use the canonical short id; known ids are
-  listed in server instructions when configured.
-- Shell: seeds aliases at startup (canonical short id per `user_labels`
-  entry, aliases = the display label + the label's leading name token) and
-  switches `ForUser`/mechanical `source_user` to the canonical id. Existing
-  long-label rows keep working via the seeded aliases — no backfill.
+- **Write — verbatim.** `Put` stores exactly the declared string. A mislabel
+  stays visible as evidence; a correction is an alias declaration, not a row
+  rewrite (the suggestibility principle from `provenance-and-memory.md`).
+- **Declare — once, reversibly.** Canonical ids are short stable strings
+  (e.g. `mami`); aliases map spellings onto them. A merge is an alias-row
+  insert; an unmerge is a delete. Resolution is one step: `canonical(x)` =
+  the matching row's canonical, else `x` itself. Chains are rejected at
+  declaration in both directions — an alias may not point at a string that
+  is itself a declared alias, and an alias string may not equal an existing
+  row's canonical (which would split one person across two ids).
+- **Resolve — at read, three points.** (1) The interlocutor boost — to be
+  implemented, red-first, since it does not exist today — applies
+  `score *= 1.8` when `canonical(memory.source_user) ==
+  canonical(params.ForUser)`, BEFORE the MinScore floor (stated explicitly;
+  an undocumented interaction with `GHOST_MIN_SCORE=0.3` is how the #103
+  incident happened). (2) `List --source-user` matches through aliases.
+  (3) Rendering stays verbatim; unifying display names is the caller's
+  choice.
+- **Interfaces.** Store: `SetSourceAlias` / `ListSourceAliases` /
+  `DeleteSourceAlias`; `ForUser` and `ListParams.SourceUser` become
+  alias-aware internally, signatures unchanged. CLI: `ghost source alias
+  <alias> --canonical <id>`, `ghost source list`, `ghost source rm`. MCP:
+  guidance names the canonical ids; no new tool yet. Shell (separate PR):
+  seeds aliases from `user_labels` at startup and passes canonical ids as
+  `ForUser` / mechanical `source_user`.
+- COLLATE NOCASE is ASCII-only; the observed fragmentation is Latin-script
+  name variants, and CJK labels do not case-fold, so both are covered.
 
-## Plan (eval-first, one PR ghost-side + one PR shell-side)
+Approvals (CONVENTIONS.md — new table, Store interface change, new CLI
+subcommand): owner, 2026-08-10.
 
-1. **Make the boost eval red.** The day-1 census found `forUserBoost` exists
-   only in the #116 commit message — no code applies it, and
-   `TestProvenanceInterlocutorBoost` passes anyway because its corpus never
-   actually forces a contested choice. Rebuild the corpus so two persons'
-   facts are relevance-symmetric and the budget admits exactly one; assert
-   the interlocutor's fact wins. Verify the test FAILS on main.
-2. **Implement `forUserBoost` (1.8, multiplicative)** at candidate scoring,
-   canonical-aware from day one. Green. Ordering is explicit and tested: the
-   boost applies BEFORE the MinScore floor — the interlocutor's own sub-floor
-   fact may be lifted over it, mirroring the `viaEdge`/`reserved` exemptions'
-   spirit (#103's lesson: an unstated interaction with `GHOST_MIN_SCORE=0.3`
-   is how retrieval subsystems die silently in production).
-3. **Red alias evals**: `TestForUserBoostAcrossAliases` (stored under a
-   variant, boosted under the canonical), `TestListFilterAcrossAliases`,
-   alias CRUD + chain-rejection + case-insensitivity unit tests, and
-   unset-`ForUser` byte-identity preserved.
-4. **CLI + MCP guidance**, with tests on `cmd.OutOrStdout()`.
-5. **Shell PR**: startup seeding + canonical `ForUser`/`source_user`;
-   per-path provenance assertions updated to expect canonical ids.
-6. **Verify on production data**: rerun the snapshot A/B from the census —
-   the curated canonical stored under a name variant must flip from
-   unboosted to boosted for the interlocutor's conversation. Two-step deploy
-   (library + PATH binary), inode-verified.
+## Options Considered
 
-Out of scope: fuzzy or automatic alias inference; cross-namespace entities;
-person metadata; rewriting stored `source_user` values; the namespace-leak
-fix for agent writes to undeclared namespaces (separate, smaller change);
-authority mechanism (c), which stays gated behind the census and now also
-behind this normalization (flipping the authority baseline before labels
-join would gate on strings that don't match).
+### Option A — caller-side canonicalization only (shell fixes its labels)
 
-## Evidence appendix — day-1 production census (2026-08-10)
+Pros:
 
-All personal data below is described generically; the corpus itself stays
-out of this repo.
+- No ghost schema, interface, or CLI change at all.
+- Fixes the majority mechanical write volume with one threaded parameter.
 
-- **Capture works.** Agent-namespace writes since the provenance deploy:
-  115/117 carry provenance on the primary agent (exchanges 50/50, hygiene
-  12/12, media notes all `stated`); 21/21 on the second agent's daemon
-  namespace. Mechanical paths at 100%, as designed.
-- **Rendering works.** The active model transcript contains 50 injected
-  memories prefixed `[<label>, stated]` — attribution reaches generation.
-- **Labels fragment on the agent-authored path.** One person appears under
-  four `source_user` spellings; 19 of 86 `stated` rows carry a variant that
-  exact-match would miss, including the most safety-relevant curated
-  canonical in the store.
-- **The boost was never implemented.** `grep forUserBoost` over the #116
-  diff matches only the commit message; `TestProvenanceInterlocutorBoost`
-  passes on main (`-count=1`, verified 2026-08-10) with no boost code — a
-  false-green: the eval's corpus resolves the "contested" slot by ordinary
-  relevance, so it never required the mechanism it gates. Ship-time sibling
-  of the silent-subsystem-death class (MinScore floor, dormancy skip,
-  reflect-scan miss): a subsystem can be born dead, not just die later, when
-  its gate can pass without it.
-- **A/B on production-profile snapshots**: 4 realistic queries, budget 2000,
-  `ForUser` set vs unset — identical admission 4/4 (consistent with the
-  mechanism not existing; also, the live corpus is single-interlocutor-
-  dominated, so even a working boost has little to disambiguate *today*).
-  Fresh snapshot per arm (context assembly mutates access counts).
-- **Namespace leak (separate fix):** one agent's MCP writes sometimes pass a
-  shortened namespace explicitly; those memories are invisible to daemon
-  context injection and half lack provenance.
+Cons:
+
+- Cannot reach the path that caused the fragmentation: the agent free-typing
+  names into `ghost_put`. Guidance alone already lost this bet once with
+  edge semantics (146/146 mislabels).
+- Every writer (daemon, skills, sync peers, future callers) must
+  re-implement the same rule; one missed writer re-fragments the corpus.
+- Existing variant rows stay unjoinable forever without rewrites.
+
+Rejected: simpler, but it defends only the paths that were never the
+problem.
+
+### Option B — normalize at write, plus a migration command for old rows
+
+Pros:
+
+- Reads stay dumb and fast; no resolution logic in the retrieval path.
+- The stored value is always already canonical.
+
+Cons:
+
+- Mutates provenance after the fact — the suggestibility failure mode the
+  provenance doc explicitly refuses; a mislabel gets laundered into
+  apparent correctness.
+- A merge is a destructive batch rewrite; an unmerge is impossible.
+- Late-declared aliases still require another migration pass each time.
+
+Rejected: violates the verbatim/historical-record principle and makes
+merges irreversible.
+
+### Option C — declared alias table, resolve at read (chosen)
+
+Pros:
+
+- Catches every writer, including the untrusted one; retroactive the moment
+  an alias is declared, with zero row rewrites.
+- Merges are instant and reversible; the record stays the record.
+- Stays mechanical: declared equivalence is bookkeeping, like tags — no
+  inference, honoring the per-turn-LLM-classification lesson.
+
+Cons:
+
+- A join (or cached map) in the read path; new table + CLI surface to
+  maintain.
+- Depends on someone declaring aliases (mitigated: shell seeds
+  mechanically; the census measures drift).
+
+### Option D — full entity registry (person rows with metadata)
+
+Pros:
+
+- Room for future person attributes and relationships in one place.
+
+Cons:
+
+- Ghost does not need entities, only identity equivalence; person facts are
+  memories, not schema.
+- Scope creep toward a knowledge graph ghost deliberately is not.
+
+Rejected: the mapping table is the smallest thing that solves the problem.
+
+## Risks
+
+- **Agents keep inventing new variants faster than anyone declares them.**
+  Mitigated: mechanical writes become canonical at the source (shell PR),
+  MCP guidance names the ids, and the adoption census measures the residue —
+  which is now recoverable by declaration instead of unfixable.
+- **A wrong alias declaration merges two people.** Mitigated: reversible by
+  deleting the row; no stored data changed. Residual risk accepted.
+- **Boost-before-MinScore lifts a junk memory over the floor.** Bounded: the
+  1.8 multiplier applies only to the interlocutor's own facts, and the
+  ordering is pinned by an explicit test rather than left emergent.
+- **False-green recurrence** — the gate passing without the mechanism, as in
+  #116. Mitigated: the plan's first commit is the eval proven red on main.
+
+## Definition of Done
+
+- [automated] Rebuilt `TestProvenanceInterlocutorBoost` demonstrably FAILS
+  at the pre-implementation commit (red run recorded in the PR) and passes
+  after the boost lands.
+- [automated] New tests green under `make test -count=1`: boost across
+  aliases, List filter across aliases, alias CRUD, chain rejection in both
+  directions, case-insensitivity, boost-before-MinScore ordering, and
+  unset-`ForUser` byte-identity.
+- [automated] `go vet` clean; existing suites unaffected.
+- [manual] Snapshot A/B on production data: a variant-labeled curated
+  canonical flips from unboosted to boosted once the alias is declared.
+- [manual] Two-step deploy verified (library + PATH binary, daemon inode
+  changed).
+- Out of this handoff: the shell seeding/canonical-id PR, the
+  namespace-leak fix, and the authority mechanism — each its own change.
+
+## Unresolved Questions
+
+- **[blocking] Canonical id scheme.** Short household nicknames (`mami`,
+  `papi`) or opaque stable ids (e.g. the messenger user id) with nicknames
+  as aliases? Nicknames are readable in renders and logs; opaque ids
+  survive nickname changes. Owner decides before implementation.
+- **[non-blocking] Expose `canonical_source_user` in `ContextMemory`**
+  alongside the verbatim field, so renderers can unify display without
+  their own lookup. Can be settled during implementation.
+- **[non-blocking] `ghost_source` MCP tool** for agent self-service
+  declaration — only if the census shows guidance is not enough.
