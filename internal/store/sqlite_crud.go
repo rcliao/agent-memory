@@ -871,8 +871,15 @@ func (s *SQLiteStore) List(ctx context.Context, p ListParams) ([]model.Memory, e
 	}
 
 	if p.SourceUser != "" {
-		where = append(where, "m.source_user = ?")
-		args = append(args, p.SourceUser)
+		// Alias-aware: match every declared spelling of the same canonical
+		// source, plus the literal value (source-identity-design.md).
+		variants := s.loadSourceResolver(ctx, p.NS).variants(p.SourceUser)
+		placeholders := make([]string, len(variants))
+		for i, v := range variants {
+			placeholders[i] = "?"
+			args = append(args, v)
+		}
+		where = append(where, "m.source_user COLLATE NOCASE IN ("+strings.Join(placeholders, ",")+")")
 	}
 
 	query := fmt.Sprintf(`

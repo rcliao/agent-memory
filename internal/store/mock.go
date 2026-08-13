@@ -1253,6 +1253,18 @@ func (m *MockStore) GetSimilarClusters(_ context.Context, ns string) ([]MemoryCl
 	return nil, nil
 }
 
+func (m *MockStore) SetSourceAlias(_ context.Context, ns, alias, canonical string) error {
+	return nil
+}
+
+func (m *MockStore) ListSourceAliases(_ context.Context, ns string) ([]SourceAlias, error) {
+	return nil, nil
+}
+
+func (m *MockStore) DeleteSourceAlias(_ context.Context, ns, alias string) error {
+	return nil
+}
+
 func (m *MockStore) Expand(_ context.Context, p ExpandParams) (*ExpandResult, error) {
 	return &ExpandResult{}, nil
 }

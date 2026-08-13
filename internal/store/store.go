@@ -253,6 +253,15 @@ type Store interface {
 	// GetSimilarClusters returns groups of memories connected by relates_to edges.
 	GetSimilarClusters(ctx context.Context, ns string) ([]MemoryCluster, error)
 
+	// SetSourceAlias declares alias → canonical for source identity resolution.
+	SetSourceAlias(ctx context.Context, ns, alias, canonical string) error
+
+	// ListSourceAliases returns all declared source aliases for a namespace.
+	ListSourceAliases(ctx context.Context, ns string) ([]SourceAlias, error)
+
+	// DeleteSourceAlias removes a declared source alias.
+	DeleteSourceAlias(ctx context.Context, ns, alias string) error
+
 	// Context assembles relevant memories within a token budget.
 	Context(ctx context.Context, p ContextParams) (*ContextResult, error)
 
