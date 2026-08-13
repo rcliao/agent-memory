@@ -91,6 +91,9 @@ type Store interface {
 	GetEdges(ctx context.Context, memoryID string) ([]Edge, error)
 	GetEdgesByNSKey(ctx context.Context, ns, key string) ([]Edge, error)
 	GetSimilarClusters(ctx context.Context, ns string) ([]MemoryCluster, error)
+	SetSourceAlias(ctx context.Context, ns, alias, canonical string) error
+	ListSourceAliases(ctx context.Context, ns string) ([]SourceAlias, error)
+	DeleteSourceAlias(ctx context.Context, ns, alias string) error
 	Consolidate(ctx context.Context, p ConsolidateParams) (*ConsolidateResult, error)
 	Expand(ctx context.Context, p ExpandParams) (*ExpandResult, error)
 	Reflect(ctx context.Context, p ReflectParams) (*ReflectResult, error)
@@ -139,6 +142,10 @@ type EdgeExpansionConfig = store.EdgeExpansionConfig
 
 // MemoryCluster represents a group of similar memories connected by edges.
 type MemoryCluster = store.MemoryCluster
+
+// SourceAlias is one declared spelling of a canonical source id
+// (source identity: who a memory came from).
+type SourceAlias = store.SourceAlias
 
 // ConsolidateParams holds parameters for creating a consolidation.
 type ConsolidateParams = store.ConsolidateParams
