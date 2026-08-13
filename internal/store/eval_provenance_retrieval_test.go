@@ -75,18 +75,69 @@ func TestProvenanceExposedInContext(t *testing.T) {
 	}
 }
 
+// contestedProvStore builds a corpus where the interlocutor's fact LOSES the
+// contested slot on raw score: papi's symmetric fact carries higher
+// importance, so without the boost it deterministically outranks mami's.
+// This is what makes the eval red without the mechanism — the original
+// corpus resolved the slot by ordinary relevance and passed with no boost
+// code at all (the #116 false-green).
+func contestedProvStore(t *testing.T) *SQLiteStore {
+	t.Helper()
+	s := newTestStore(t)
+	ctx := context.Background()
+	puts := []PutParams{
+		{Key: "mami-trains", Content: "Mami prefers the window seat on long train rides.",
+			SourceUser: "mami", SourceKind: "stated", Importance: 0.5},
+		{Key: "papi-trains", Content: "Papi prefers the aisle seat on long train rides.",
+			SourceUser: "papi", SourceKind: "stated", Importance: 0.9},
+	}
+	for i, f := range []string{
+		"Train tickets for the coast trip were cheaper on Tuesdays.",
+		"The long train ride south has a dining car after the first stop.",
+		"Train delays last spring made the connection tight twice.",
+	} {
+		puts = append(puts, PutParams{Key: "train-note-" + string(rune('0'+i)), Content: f, Importance: 0.4})
+	}
+	for _, p := range puts {
+		p.NS, p.Kind, p.Tier = "agent:home", "semantic", "ltm"
+		if _, err := s.Put(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return s
+}
+
 // (b) Interlocutor boost: when the budget forces a choice between two equally
 // relevant person-facts, ForUser must tip it toward the person in the
 // conversation — and must change nothing when unset.
 func TestProvenanceInterlocutorBoost(t *testing.T) {
-	s := provStore(t)
+	s := contestedProvStore(t)
 	ctx := context.Background()
 
-	// Tight budget: room for roughly one seat-preference fact among the
-	// filler. Without ForUser the choice falls to tie-break noise; with
-	// ForUser=mami her fact must be present.
+	// The contested slot must actually be contested: without ForUser,
+	// papi's higher-importance fact wins it and mami's is squeezed out.
+	// If this precondition fails the corpus no longer forces a choice and
+	// the assertions below prove nothing — fail loudly rather than pass
+	// vacuously (the exact failure shape of the original corpus).
+	base, err := s.Context(ctx, ContextParams{
+		NS: "agent:home", Query: "train seat preferences", Budget: 40})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseKeys := map[string]bool{}
+	for _, m := range base.Memories {
+		baseKeys[m.Key] = true
+	}
+	if !baseKeys["papi-trains"] || baseKeys["mami-trains"] {
+		t.Fatalf("corpus precondition broken: contested slot must go to papi without ForUser "+
+			"(got papi=%v mami=%v, keys %v) — retune budget/importance before trusting this eval",
+			baseKeys["papi-trains"], baseKeys["mami-trains"], keysOf(base))
+	}
+
+	// The mechanism under test: ForUser=mami must flip the contested slot
+	// to her fact. Fails on any build where the boost does not exist.
 	res, err := s.Context(ctx, ContextParams{
-		NS: "agent:home", Query: "train seat preferences", Budget: 260, ForUser: "mami"})
+		NS: "agent:home", Query: "train seat preferences", Budget: 40, ForUser: "mami"})
 	if err != nil {
 		t.Fatal(err)
 	}
