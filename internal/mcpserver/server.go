@@ -45,7 +45,7 @@ Memory kinds (Tulving's taxonomy, affects retrieval scoring):
 Priority: low, normal (default), high, critical.
 Tier (Atkinson-Shiffrin model): sensory (ultra-short, aggressive decay), stm (default, subject to decay), ltm (proven useful, long-term).
 Pinned: set pinned=true for memories that should always be loaded in context (e.g. identity, core conventions). Pinned memories are exempt from lifecycle decay.
-Provenance: when a memory records what a PERSON said, prefers, or did, set source_user to that person and source_kind to how you know it (stated | observed | self | peer). A stated preference outranks your own inference about the same person. The chat is a channel, not provenance — keep chat ids in tags.
+Provenance: when a memory records what a PERSON said, prefers, or did, set source_user to that person and source_kind to how you know it (stated | observed | self | peer). A stated preference outranks your own inference about the same person. The chat is a channel, not provenance — keep chat ids in tags. Use ONE canonical short id per person (the same string every time, e.g. "mami" — never a display name, nickname variant, or different casing); declared aliases (ghost source alias) make variant spellings resolve to the canonical, but a consistent id needs no repair.
 
 Retrieval flow:
 - ghost_context: start here — assembles scored context within a token budget. Summaries replace their children automatically. When compaction_suggested is true, use ghost_expand to find what needs consolidation.

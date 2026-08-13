@@ -83,6 +83,14 @@ type ContextParams struct {
 	ForUser string
 }
 
+// forUserBoost is the multiplicative score boost for memories originated by
+// the current interlocutor (ContextParams.ForUser) — enough to win a
+// contested budget slot against same-topic competition, not enough for
+// person-affinity to outrank the relevance machinery. Magnitude pinned by
+// TestProvenanceInterlocutorBoost; 1.8 is a starting point, not a
+// validated optimum.
+const forUserBoost = 1.8
+
 // ContextMemory is a scored memory for context output.
 type ContextMemory struct {
 	NS      string  `json:"ns"`
@@ -288,6 +296,18 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		return w, true
 	}
 
+	// Interlocutor boost: the person in the conversation gets their own
+	// stated facts preferred when the budget is contested. Resolution goes
+	// through the declared alias table so a fact stored under any spelling
+	// of the person still matches (source-identity-design.md). Applied
+	// BEFORE the MinScore floor — the interlocutor's own sub-floor fact may
+	// be lifted over it, in the same spirit as the viaEdge/reserved
+	// exemptions (#103: undocumented MinScore interactions kill subsystems).
+	var resolver sourceResolver
+	if p.ForUser != "" {
+		resolver = s.loadSourceResolver(ctx, p.NS)
+	}
+
 	// scoreMap tracks scores by memory ID for edge boost merging
 	scoreMap := map[string]*contextCandidate{}
 
@@ -311,6 +331,9 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		score := computeContextScoreWithAccess(m, sim, now, p.Scope, accessTimes[m.ID])
 		if w, isParent := summaryWeightFor(m.ID); isParent {
 			score *= w
+		}
+		if p.ForUser != "" && resolver.sameSource(m.SourceUser, p.ForUser) {
+			score *= forUserBoost
 		}
 		scoreMap[m.ID] = &contextCandidate{memory: m, score: score, relevance: sim}
 	}

@@ -203,6 +203,15 @@ func (s *SQLiteStore) migrate() error {
 	// never backfilled.
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN source_user TEXT`)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN source_kind TEXT`)
+	// Source identity: declared alias → canonical person-id mapping,
+	// resolved at read; memory rows stay verbatim (source-identity-design.md).
+	s.db.Exec(`CREATE TABLE IF NOT EXISTS source_aliases (
+		ns         TEXT NOT NULL,
+		alias      TEXT NOT NULL COLLATE NOCASE,
+		canonical  TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		PRIMARY KEY (ns, alias)
+	)`)
 	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memories_source_user ON memories(ns, source_user)`)
 	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memories_tier ON memories(tier)`)
 	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC)`)

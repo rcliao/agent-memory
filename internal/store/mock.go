@@ -24,6 +24,7 @@ type MockStore struct {
 	links    []Link
 	files    map[string][]model.FileRef // memory_id -> file refs
 	rules    map[string]ReflectRule     // id -> rule
+	aliases  map[string]string          // ns+"\x00"+alias -> canonical
 	entropy  *rand.Rand
 }
 
@@ -33,6 +34,7 @@ func NewMockStore() *MockStore {
 		memories: make(map[string]model.Memory),
 		files:    make(map[string][]model.FileRef),
 		rules:    make(map[string]ReflectRule),
+		aliases:  make(map[string]string),
 		entropy:  rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
@@ -1251,6 +1253,39 @@ func (m *MockStore) GetEdgesByNSKey(_ context.Context, ns, key string) ([]Edge, 
 
 func (m *MockStore) GetSimilarClusters(_ context.Context, ns string) ([]MemoryCluster, error) {
 	return nil, nil
+}
+
+func (m *MockStore) SetSourceAlias(_ context.Context, ns, alias, canonical string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.aliases[ns+"\x00"+alias] = canonical
+	return nil
+}
+
+func (m *MockStore) ListSourceAliases(_ context.Context, ns string) ([]SourceAlias, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var out []SourceAlias
+	for k, canonical := range m.aliases {
+		parts := strings.SplitN(k, "\x00", 2)
+		if parts[0] != ns {
+			continue
+		}
+		out = append(out, SourceAlias{NS: ns, Alias: parts[1], Canonical: canonical})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Alias < out[j].Alias })
+	return out, nil
+}
+
+func (m *MockStore) DeleteSourceAlias(_ context.Context, ns, alias string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := ns + "\x00" + alias
+	if _, ok := m.aliases[k]; !ok {
+		return fmt.Errorf("source alias: no alias %q in %s", alias, ns)
+	}
+	delete(m.aliases, k)
+	return nil
 }
 
 func (m *MockStore) Expand(_ context.Context, p ExpandParams) (*ExpandResult, error) {
