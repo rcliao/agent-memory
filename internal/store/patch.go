@@ -228,7 +228,7 @@ func PatchMemory(ctx context.Context, st Store, p PatchMemoryParams) (*PatchResu
 		Meta: h.Meta, Unlock: p.Unlock,
 		// A patch edits content, not origin: the memory still records what
 		// the same person said, lightly corrected.
-		SourceUser: h.SourceUser, SourceKind: h.SourceKind,
+		SourceUser: h.SourceUser, SourceKind: h.SourceKind, SourceScope: h.SourceScope,
 		// CAS against the exact head the patch was applied to: if anything
 		// moved the key between our Get and this Put, conflict — never a
 		// silent overwrite of the concurrent edit.

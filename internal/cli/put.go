@@ -32,6 +32,7 @@ func init() {
 	cmd.Flags().Bool("dedup", false, "Skip storing if a semantically similar memory already exists (cosine > 0.92)")
 	cmd.Flags().Bool("unlock", false, "Authorize overwriting a memory tagged 'locked' (owner-initiated edits only)")
 	cmd.Flags().String("source-user", "", "The PERSON this memory originated from (e.g. a family member's name) — chats are channels and belong in tags")
+	cmd.Flags().String("source-scope", "", "WHERE this memory was born — a stable place id like 'project:ghost'")
 	cmd.Flags().String("source-kind", "", "How it entered the store: stated, observed, self, peer")
 	cmd.Flags().Int("base-version", 0, "Compare-and-swap: fail unless the key's current version equals this (0 = unconditional write). On conflict, re-read with 'ghost get', remake the edit, retry")
 
@@ -122,6 +123,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	unlock, _ := cmd.Flags().GetBool("unlock")
 	baseVersion, _ := cmd.Flags().GetInt("base-version")
 	sourceUser, _ := cmd.Flags().GetString("source-user")
+	sourceScope, _ := cmd.Flags().GetString("source-scope")
 	sourceKind, _ := cmd.Flags().GetString("source-kind")
 
 	mem, err := st.Put(cmd.Context(), store.PutParams{
@@ -140,6 +142,7 @@ func runPut(cmd *cobra.Command, args []string) {
 		Unlock:      unlock,
 		BaseVersion: baseVersion,
 		SourceUser:  sourceUser,
+		SourceScope: sourceScope,
 		SourceKind:  sourceKind,
 	})
 	if err != nil {
