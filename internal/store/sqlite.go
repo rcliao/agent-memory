@@ -203,6 +203,7 @@ func (s *SQLiteStore) migrate() error {
 	// never backfilled.
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN source_user TEXT`)
 	s.db.Exec(`ALTER TABLE memories ADD COLUMN source_kind TEXT`)
+	s.db.Exec(`ALTER TABLE memories ADD COLUMN source_scope TEXT`)
 	// Source identity: declared alias → canonical person-id mapping,
 	// resolved at read; memory rows stay verbatim (source-identity-design.md).
 	s.db.Exec(`CREATE TABLE IF NOT EXISTS source_aliases (
@@ -444,7 +445,7 @@ type scanner interface {
 
 func scanMemory(row scanner) (model.Memory, error) {
 	var m model.Memory
-	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier, sourceUser, sourceKind sql.NullString
+	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier, sourceUser, sourceKind, sourceScope sql.NullString
 	var createdAt string
 	var importance sql.NullFloat64
 	var utilityCount, estTokens, pinned sql.NullInt64
@@ -454,7 +455,7 @@ func scanMemory(row scanner) (model.Memory, error) {
 		&m.Version, &supersedes, &createdAt, &deletedAt,
 		&m.Priority, &m.AccessCount, &lastAccessed, &meta, &expiresAt,
 		&importance, &utilityCount, &tier, &estTokens, &pinned,
-		&sourceUser, &sourceKind,
+		&sourceUser, &sourceKind, &sourceScope,
 	)
 	if err != nil {
 		return m, err
@@ -506,6 +507,9 @@ func scanMemory(row scanner) (model.Memory, error) {
 	}
 	if sourceKind.Valid {
 		m.SourceKind = sourceKind.String
+	}
+	if sourceScope.Valid {
+		m.SourceScope = sourceScope.String
 	}
 
 	return m, nil

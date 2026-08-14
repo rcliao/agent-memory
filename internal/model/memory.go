@@ -29,6 +29,10 @@ type Memory struct {
 	// SourceKind is how it entered the store: stated (the person said it),
 	// observed (agent inference), self (agent's own note), peer (another agent).
 	SourceKind string `json:"source_kind,omitempty"`
+	// SourceScope is WHERE the memory was born — a caller-defined place id
+	// ("project:ghost" for a coding agent, "chat:123" for a messenger).
+	// Encoding context per provenance-encoding-context-design.md. Empty = unknown.
+	SourceScope string `json:"source_scope,omitempty"`
 	Pinned         bool       `json:"pinned"`
 	EstTokens      int        `json:"est_tokens"`
 	ChunkCount     int        `json:"chunks,omitempty"`

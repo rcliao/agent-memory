@@ -53,6 +53,10 @@ type PutParams struct {
 	SourceUser string
 	// SourceKind: stated | observed | self | peer. Empty = unknown.
 	SourceKind string
+	// SourceScope records WHERE the memory was born — a caller-defined place
+	// id ("project:ghost", "chat:123"). The encoding context per
+	// provenance-encoding-context-design.md. Empty = unknown, never backfilled.
+	SourceScope string
 }
 
 // FileParam specifies a file to link to a memory.

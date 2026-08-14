@@ -81,6 +81,11 @@ type ContextParams struct {
 	// instruction from one family member can matter mid-conversation with
 	// another). Empty = no effect, preserving prior behaviour exactly.
 	ForUser string
+	// ForScope is the place the conversation is happening — the project a
+	// coding agent is working in, the chat a messenger agent is serving.
+	// Memories born in the same scope (source_scope match, alias-resolved)
+	// get a score boost. Boost, never filter; empty = no effect.
+	ForScope string
 }
 
 // forUserBoost is the multiplicative score boost for memories originated by
@@ -109,6 +114,8 @@ type ContextMemory struct {
 	// the authority ladder — it just needs to see which is which.
 	SourceUser string `json:"source_user,omitempty"`
 	SourceKind string `json:"source_kind,omitempty"`
+	// SourceScope is where the memory was born (encoding context), verbatim.
+	SourceScope string `json:"source_scope,omitempty"`
 }
 
 // ContextResult is the assembled context response.
@@ -186,7 +193,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 					Content:    m.Content,
 					Score:      m.Importance, // pinned memories use importance as score
 					SourceUser: m.SourceUser,
-					SourceKind: m.SourceKind,
+					SourceKind: m.SourceKind, SourceScope: m.SourceScope,
 				})
 				usedTokens += memTokens
 				seen[m.ID] = true
@@ -568,7 +575,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 				Excerpt:    isExcerpt,
 				SummaryOf:  substituted[c.memory.ID],
 				SourceUser: c.memory.SourceUser,
-				SourceKind: c.memory.SourceKind,
+				SourceKind: c.memory.SourceKind, SourceScope: c.memory.SourceScope,
 			})
 			usedTokens += memTokens
 		} else if remainingTokens := budget - usedTokens; remainingTokens >= 25 {
@@ -587,7 +594,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 				Score:      math.Round(c.score*100) / 100,
 				Excerpt:    true,
 				SourceUser: c.memory.SourceUser,
-				SourceKind: c.memory.SourceKind,
+				SourceKind: c.memory.SourceKind, SourceScope: c.memory.SourceScope,
 			})
 			usedTokens += excerptTokens
 			break
@@ -995,7 +1002,7 @@ func (s *SQLiteStore) loadPinnedMemories(ctx context.Context, ns string) ([]mode
 
 	query := fmt.Sprintf(`SELECT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
 		m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at,
-		m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind
+		m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind, m.source_scope
 		FROM memories m
 		INNER JOIN (
 			SELECT ns, key, MAX(version) AS max_ver

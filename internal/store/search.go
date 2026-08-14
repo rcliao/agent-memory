@@ -1074,23 +1074,37 @@ func (s *SQLiteStore) getMemoryByID(ctx context.Context, id string) (*model.Memo
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, ns, key, content, kind, tags, version, supersedes,
 		        created_at, deleted_at, priority, access_count, last_accessed_at, meta, expires_at,
-		        importance, utility_count, tier, est_tokens, pinned, source_user, source_kind
+		        importance, utility_count, tier, est_tokens, pinned, source_user, source_kind, source_scope
 		 FROM memories WHERE id = ? AND deleted_at IS NULL`, id)
 
 	var m model.Memory
-	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier sql.NullString
+	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier, sourceUser, sourceKind, sourceScope sql.NullString
 	var createdAt string
 	var importance sql.NullFloat64
 	var utilityCount, estTokens, pinned sql.NullInt64
 
+	// NOTE: #113 added source columns to the SELECT above without extending
+	// this hand-rolled scan — every call errored from that commit until the
+	// scope eval caught it (the 4th silent-subsystem-death; the roadmap's
+	// liveness canary exists for exactly this class).
 	err := row.Scan(
 		&m.ID, &m.NS, &m.Key, &m.Content, &m.Kind, &tagsJSON,
 		&m.Version, &supersedes, &createdAt, &deletedAt,
 		&m.Priority, &m.AccessCount, &lastAccessed, &meta, &expiresAt,
 		&importance, &utilityCount, &tier, &estTokens, &pinned,
+		&sourceUser, &sourceKind, &sourceScope,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if sourceUser.Valid {
+		m.SourceUser = sourceUser.String
+	}
+	if sourceKind.Valid {
+		m.SourceKind = sourceKind.String
+	}
+	if sourceScope.Valid {
+		m.SourceScope = sourceScope.String
 	}
 
 	m.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
@@ -1587,7 +1601,7 @@ func (s *SQLiteStore) searchFTS(ctx context.Context, p SearchParams, limit int) 
 		)
 		SELECT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
 		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at,
-		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind
+		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind, m.source_scope
 		FROM matched f
 		INNER JOIN chunks c ON c.rowid = f.rowid
 		INNER JOIN memories m ON m.id = c.memory_id
@@ -1679,7 +1693,7 @@ func (s *SQLiteStore) searchVector(ctx context.Context, p SearchParams, exclude 
 	query := fmt.Sprintf(`
 		SELECT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
 		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at,
-		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind,
+		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind, m.source_scope,
 		       c.embedding
 		FROM memories m
 		INNER JOIN (
@@ -1754,7 +1768,7 @@ func (s *SQLiteStore) searchVector(ctx context.Context, p SearchParams, exclude 
 // scanMemoryWithExtra scans a memory row plus additional columns.
 func scanMemoryWithExtra(row scanner, extras ...interface{}) (model.Memory, error) {
 	var m model.Memory
-	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier, sourceUser, sourceKind sql.NullString
+	var tagsJSON, supersedes, deletedAt, lastAccessed, meta, expiresAt, tier, sourceUser, sourceKind, sourceScope sql.NullString
 	var createdAt string
 	var importance sql.NullFloat64
 	var utilityCount, estTokens, pinned sql.NullInt64
@@ -1764,7 +1778,7 @@ func scanMemoryWithExtra(row scanner, extras ...interface{}) (model.Memory, erro
 		&m.Version, &supersedes, &createdAt, &deletedAt,
 		&m.Priority, &m.AccessCount, &lastAccessed, &meta, &expiresAt,
 		&importance, &utilityCount, &tier, &estTokens, &pinned,
-		&sourceUser, &sourceKind,
+		&sourceUser, &sourceKind, &sourceScope,
 	}
 	dest = append(dest, extras...)
 
@@ -1819,6 +1833,9 @@ func scanMemoryWithExtra(row scanner, extras ...interface{}) (model.Memory, erro
 	}
 	if sourceKind.Valid {
 		m.SourceKind = sourceKind.String
+	}
+	if sourceScope.Valid {
+		m.SourceScope = sourceScope.String
 	}
 
 	return m, nil
@@ -1879,7 +1896,7 @@ func (s *SQLiteStore) searchLike(ctx context.Context, p SearchParams, baseWhere 
 	sql := fmt.Sprintf(`
 		SELECT DISTINCT m.id, m.ns, m.key, m.content, m.kind, m.tags, m.version, m.supersedes,
 		       m.created_at, m.deleted_at, m.priority, m.access_count, m.last_accessed_at, m.meta, m.expires_at,
-		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind
+		       m.importance, m.utility_count, m.tier, m.est_tokens, m.pinned, m.source_user, m.source_kind, m.source_scope
 		FROM memories m
 		INNER JOIN (
 			SELECT ns, key, MAX(version) AS max_ver
