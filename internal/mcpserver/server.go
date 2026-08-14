@@ -142,6 +142,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			"dedup":        prop("boolean", "If true, skip storing when a semantically similar memory already exists (cosine > 0.82)"),
 			"source_user":  prop("string", "The PERSON this memory originated from (e.g. the family member who said it). NOT the chat — a chat is a channel and belongs in tags. Set this whenever a memory records what someone said, prefers, or did; it is how you later fit responses to that person and how junk stays attributable."),
 			"source_kind":  prop("string", "How it entered the store: 'stated' (the person explicitly said it — highest authority), 'observed' (you inferred it from behaviour), 'self' (your own note to yourself), 'peer' (came from another agent)"),
+			"source_scope": prop("string", "WHERE this memory was born — a stable place id like 'project:ghost' (coding agents: the project you are working in). Not the chat id (that is a tag). Use the same id every time; declared aliases repair variants but consistency needs no repair."),
 			"base_version": prop("number", "Compare-and-swap: the version you read before editing (from ghost_get). The write fails with a version-conflict error if another writer moved the key past it — re-read, remake your edit against the fresh content, retry. Omit or 0 for an unconditional write. Use this whenever you EDIT an existing memory rather than append a new one."),
 		}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -158,8 +159,9 @@ func registerTools(server *mcp.Server, st store.Store) {
 			TTL        string   `json:"ttl"`
 			Dedup      bool     `json:"dedup"`
 			BaseVer    float64  `json:"base_version"`
-			SourceUser string   `json:"source_user"`
-			SourceKind string   `json:"source_kind"`
+			SourceUser  string  `json:"source_user"`
+			SourceKind  string  `json:"source_kind"`
+			SourceScope string  `json:"source_scope"`
 		}
 		if err := unmarshalArgs(req, &p); err != nil {
 			return errResult(err.Error()), nil
@@ -182,6 +184,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			BaseVersion: int(p.BaseVer),
 			SourceUser:  p.SourceUser,
 			SourceKind:  p.SourceKind,
+			SourceScope: p.SourceScope,
 		})
 		if err != nil {
 			return errResult(err.Error()), nil
@@ -264,6 +267,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			"min_score":      prop("number", "Absolute score floor (0-1). Drop candidates below this. 0 = no filter. Helpful at scale to suppress low-confidence retrievals."),
 			"min_spread":     prop("number", "If top-1 score minus top-5 score is less than this delta, collapse to top-1 only (flat-noise detection). 0 = no filter. ~0.15 is a good starting value."),
 			"for_user":       prop("string", "The person you are currently talking to. Memories they originated (source_user match) get a boost so their own stated facts and preferences surface first under a tight budget. A boost, never a filter — other people's facts stay retrievable."),
+			"for_scope":      prop("string", "The place this conversation is happening (e.g. 'project:ghost' when working in that repo). Memories born in the same scope get a boost under a tight budget. A boost, never a filter."),
 		}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var p struct {
@@ -275,6 +279,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			ExcludePinned bool     `json:"exclude_pinned"`
 			MinScore      float64  `json:"min_score"`
 			ForUser       string   `json:"for_user"`
+			ForScope      string   `json:"for_scope"`
 			MinSpread     float64  `json:"min_spread"`
 		}
 		if err := unmarshalArgs(req, &p); err != nil {
@@ -293,7 +298,7 @@ func registerTools(server *mcp.Server, st store.Store) {
 			MinScore:      p.MinScore,
 			MinSpread:     p.MinSpread,
 
-			ForUser: p.ForUser})
+			ForUser: p.ForUser, ForScope: p.ForScope})
 		if err != nil {
 			return errResult(err.Error()), nil
 		}

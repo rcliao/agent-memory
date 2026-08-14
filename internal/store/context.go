@@ -96,6 +96,12 @@ type ContextParams struct {
 // validated optimum.
 const forUserBoost = 1.8
 
+// forScopeBoost is the same-magnitude sibling for encoding context: memories
+// born where the conversation is happening (ForScope, alias-resolved) win
+// contested slots against out-of-scope twins. Pinned by
+// TestScopeBoostContested; applied before the MinScore floor like ForUser.
+const forScopeBoost = 1.8
+
 // ContextMemory is a scored memory for context output.
 type ContextMemory struct {
 	NS      string  `json:"ns"`
@@ -311,7 +317,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	// be lifted over it, in the same spirit as the viaEdge/reserved
 	// exemptions (#103: undocumented MinScore interactions kill subsystems).
 	var resolver sourceResolver
-	if p.ForUser != "" {
+	if p.ForUser != "" || p.ForScope != "" {
 		resolver = s.loadSourceResolver(ctx, p.NS)
 	}
 
@@ -341,6 +347,9 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		}
 		if p.ForUser != "" && resolver.sameSource(m.SourceUser, p.ForUser) {
 			score *= forUserBoost
+		}
+		if p.ForScope != "" && resolver.sameSource(m.SourceScope, p.ForScope) {
+			score *= forScopeBoost
 		}
 		scoreMap[m.ID] = &contextCandidate{memory: m, score: score, relevance: sim}
 	}
