@@ -44,7 +44,7 @@ Ghost is a persistent memory system for AI agents. Single binary, SQLite-backed,
 | `internal/embedding` | Pluggable embeddings (local all-MiniLM / Ollama / OpenAI) + local cross-encoder reranker | ~880 LOC |
 | `internal/chunker` | Markdown-aware text splitting (~400 char targets) | 193 LOC |
 | `internal/ingest` | Markdown file parser (H2 → sections → memories) | 154 LOC |
-| `internal/mcpserver` | MCP server over stdio (10 tools: put, get, search, context, expand, consolidate, curate, reflect, edge, edge_candidates) | ~556 LOC |
+| `internal/mcpserver` | MCP server over stdio (11 tools: put, get, search, context, expand, consolidate, curate, reflect, edge, edge_candidates, patch) | ~556 LOC |
 | `internal/dash` | Terminal dashboard for inspecting memory state | ~387 LOC |
 | `internal/model` | Core data types: `Memory`, `Chunk`, `FileRef` | 69 LOC |
 | `memory.go` | Public library API — re-exports from internal packages | ~102 LOC |
@@ -69,6 +69,9 @@ Memory {
   Version        int         // auto-incremented on update
   Supersedes     string      // ID of previous version
   Tags           []string    // first-class filtering (identity, lore, project:ghost, chat:123)
+  SourceUser     string      // the PERSON this memory originated from, caller-declared
+  SourceKind     string      // how it entered the store: stated | observed | self | peer
+  SourceScope    string      // WHERE it was born — a stable place id, e.g. "project:ghost"
   AccessCount    int         // incremented on every retrieval
   UtilityCount   int         // incremented when directly useful (query-hit, not edge passenger)
   Ease           float64     // spaced-repetition decay resistance (1.0 neutral; grows with utility)
@@ -76,6 +79,8 @@ Memory {
   TTL/ExpiresAt              // optional expiration
 }
 ```
+
+**Compare-and-swap writes**: `PutParams.BaseVersion` (CLI: `ghost put --base-version`), when non-zero, makes the write conditional — it fails with `ErrVersionConflict` unless the key's current version still matches, so concurrent editors don't silently clobber each other.
 
 ### Chunk
 
@@ -192,7 +197,7 @@ Three-phase greedy packing within a token budget:
 
 1. **Phase 1 (Pinned)**: Load all `pinned = true` memories, ordered by importance. Fills up to `budget/3`.
 2. **Phase 2 (Search)**: Query-relevant memories scored by composite metric, filterable by tags.
-3. **Phase 3 (Edge Expansion)**: Implements spreading activation (Collins & Loftus, 1975). For each seed from Phase 2, follow top-K outgoing edges (sorted by weight). Neighbors enter the candidate pool with propagated scores: `propagated = seed_score × edge_weight × damping`. Memories that appear as both direct hits and edge neighbors get additive boost (capped at `MaxBoostFactor × direct_score`). **`contradicts` edges** bypass the normal cap — contradicting memories get a minimum score of 80% of the seed's score, ensuring conflicts are always surfaced. **Parent boosting**: when a seed is a child of a `contains` parent, the parent is pulled into the candidate pool with at least the child's score — ensuring summaries appear even when the query matches children but not the summary. **Containment suppression**: before packing, children of `contains` parents in the candidate pool are suppressed to avoid redundancy. Final pool is re-sorted and greedy-packed into remaining budget.
+3. **Phase 3 (Edge Expansion)**: Implements spreading activation (Collins & Loftus, 1975). For each seed from Phase 2, follow top-K outgoing edges (sorted by weight), breadth-first, per-relation depth: `relates_to` and `contradicts` stay single-hop, but `depends_on`, `prevents`, and `caused_by` are followed two hops deep so a prerequisite/blocker chain reaches its actionable end (each memory still expands only once, at the shallowest depth it's reached). Override the deepest hop globally with `GHOST_EDGE_MAX_HOPS` (e.g. `=1` to roll back to single-hop). Neighbors enter the candidate pool with propagated scores: `propagated = seed_score × edge_weight × damping`. Memories that appear as both direct hits and edge neighbors get additive boost (capped at `MaxBoostFactor × direct_score`). **`contradicts` edges** bypass the normal cap — contradicting memories get a minimum score of 80% of the seed's score, ensuring conflicts are always surfaced. **Parent boosting**: when a seed is a child of a `contains` parent, the parent is pulled into the candidate pool with at least the child's score — ensuring summaries appear even when the query matches children but not the summary. **Containment suppression**: before packing, children of `contains` parents in the candidate pool are suppressed to avoid redundancy. Final pool is re-sorted and greedy-packed into remaining budget.
 
 **Personalized-PageRank multi-hop (opt-in, `GHOST_PPR=1`)**: replaces the single-hop Phase-3 with a pure-Go damped random-walk-with-restart over the namespace's edge graph (`internal/store/ppr.go`), seeded from the Phase-2 scores. It reaches 2–3 hops and rewards multi-path convergence (a memory reachable from several seeds accumulates mass) — signal single-hop discards. The `contradicts` force-include and `contains` parent-boosting passes are preserved outside the PPR blend. Off by default so the strong single-hop path can't regress; A/B on the multi-hop eval slice. Substrate is real: ~52% of live edges are entity/topic *bridges*, not similarity echoes (see `TestPPRAblationEdgeProvenance`).
 
@@ -281,7 +286,7 @@ Edges have their own lifecycle managed alongside memory nodes:
 
 ## MCP Server
 
-Exposes 10 tools over stdio transport using `github.com/modelcontextprotocol/go-sdk`:
+Exposes 11 tools over stdio transport using `github.com/modelcontextprotocol/go-sdk`:
 - `ghost_put` — Store/update a memory (auto-links similar via edges)
 - `ghost_get` — Retrieve a specific memory by namespace and key
 - `ghost_search` — Full-text search with ranking
@@ -292,6 +297,7 @@ Exposes 10 tools over stdio transport using `github.com/modelcontextprotocol/go-
 - `ghost_edge` — Create, remove, or list weighted edges between memories for DAG-based retrieval
 - `ghost_reflect` — Run lifecycle rules across all memories (promote, decay, prune, merge similar, edge decay)
 - `ghost_edge_candidates` — Return `relates_to` pairs that do not yet have a typed reasoning edge, so the calling agent (itself an LLM) can classify them and commit edges via `ghost_edge`. Ghost does zero LLM work — the hot path AND this hygiene path stay LLM-free. For fully-automated batch inference without an agent in the loop, use the `ghost infer-edges` CLI instead, which does spawn an LLM.
+- `ghost_patch` — Edit a memory by applying a unified diff to its current content; only the touched lines change, so repeated edits cannot slowly reword the rest. Guards against stale context (context_mismatch) and concurrent writers (version_conflict). Preferred over `ghost_put` when editing an existing memory.
 
 Started via `ghost mcp-serve` subcommand. See [Claude Code Setup](quickstart-claude-code.md) or [Integration Guide](integration-guide.md) for usage patterns.
 

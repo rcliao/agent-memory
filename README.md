@@ -97,7 +97,7 @@ ghost rule set --name "fast-promote" --cond-tier stm --cond-age-gt 12 \
 - **Vector embeddings**: all-MiniLM-L6-v2 (pure Go, no CGo) fused with FTS5 via Reciprocal Rank Fusion,
   plus an optional local cross-encoder reranker
 - **Storage compaction**: `ghost gc --purge-deleted` reclaims soft-deleted rows + orphaned embeddings
-- **MCP server**: `ghost mcp-serve` exposes 10 tools for Claude Code and other MCP clients
+- **MCP server**: `ghost mcp-serve` exposes 11 tools for Claude Code and other MCP clients
 
 ## Namespace Conventions
 
@@ -116,6 +116,7 @@ Tags provide categorization within a namespace: `identity`, `lore`, `project:<na
 | Command | Description |
 |---------|-------------|
 | `put` | Store or update a memory (auto-links similar via edges) |
+| `patch` | Apply a unified diff to a memory's content (safer than `put` for targeted edits) |
 | `capture` | Extract + store memories from raw text/transcripts (deterministic, no LLM; `--json` ingests LLM candidates) |
 | `mine-procedures` | Induce recurring workflows from usage sequences into procedural memories (no LLM) |
 | `get` | Retrieve by namespace + key |
@@ -158,6 +159,7 @@ Tags provide categorization within a namespace: `identity`, `lore`, `project:<na
 | `files` | Find memories linked to a file path |
 | `embed` | Manage vector embeddings (backfill, stats) |
 | `link` | Create/remove relationships (legacy — use `edge` instead) |
+| `source` | Manage source-identity aliases — declare that different `source_user` spellings name the same person |
 
 ### Data
 
@@ -205,7 +207,7 @@ ghost consolidate -n agent:mybot --summary-key auth-overview \
 claude mcp add --scope user --transport stdio ghost -- ghost mcp-serve
 ```
 
-Exposes 10 tools: `ghost_put`, `ghost_get`, `ghost_search`, `ghost_context`, `ghost_expand`, `ghost_consolidate`, `ghost_edge`, `ghost_edge_candidates`, `ghost_curate`, `ghost_reflect`.
+Exposes 11 tools: `ghost_put`, `ghost_get`, `ghost_search`, `ghost_context`, `ghost_expand`, `ghost_consolidate`, `ghost_edge`, `ghost_edge_candidates`, `ghost_curate`, `ghost_reflect`, `ghost_patch`.
 
 See [Claude Code Setup](docs/quickstart-claude-code.md) for full setup including hooks and CLAUDE.md instructions.
 
@@ -228,6 +230,7 @@ All defaults are sensible; these tune the personalization and retrieval behavior
 | `GHOST_UTILITY_WEIGHT` | `0` (off) | Blend proven usefulness (`utility_count/access_count`) into context ranking. |
 | `GHOST_EDGE_THRESHOLD` | `0.85` | Cosine threshold for auto-linking edges on `put`. |
 | `GHOST_RELINK_MAX` | `8` | Max edges per memory kept by `reflect --relink` (0 = uncapped). |
+| `GHOST_EDGE_MAX_HOPS` | per-relation (1, or 2 for `depends_on`/`prevents`/`caused_by`) | Overrides how many hops edge expansion follows in Phase 3, in both directions — set `1` to force single-hop across all relations. |
 | `GHOST_PPR` | `0` (off) | Personalized-PageRank multi-hop context expansion (pure-Go) instead of single-hop — reaches 2–3 hops and rewards multi-path convergence. Tune with `GHOST_PPR_ALPHA` (restart, 0.5) / `GHOST_PPR_ITERS` (20). Measured on LongMemEval_S context-mode: regresses R@5 (0.502→0.399) — off for good reason; only worth trying on graphs rich in curated entity/topic edges. |
 | `GHOST_BITEMPORAL` | `0` (off) | Bi-temporal validity: supersede detection also stamps `valid_to` on the replaced fact, default search hard-retires invalidated facts, and `AsOf` recall reconstructs past belief states. |
 | `GHOST_MIN_SCORE` | `0` (off) | Context confidence floor for callers that don't set one — drops low-score candidates instead of returning confident-looking noise for absent topics. `0.3` measured regression-free; recommended for deployments. |
