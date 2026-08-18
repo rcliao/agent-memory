@@ -1019,6 +1019,7 @@ func (s *SQLiteStore) expandSearchEdges(ctx context.Context, p SearchParams, res
 	for _, seed := range results[:seedN] {
 		edges, err := s.GetEdges(ctx, seed.ID)
 		if err != nil {
+			diagLinkExpansionErrors.Add(1)
 			continue
 		}
 		for _, edge := range edges {
@@ -1034,7 +1035,13 @@ func (s *SQLiteStore) expandSearchEdges(ctx context.Context, p SearchParams, res
 
 			// Fetch the neighbor memory
 			neighbor, err := s.getMemoryByID(ctx, neighborID)
-			if err != nil || neighbor == nil {
+			if err != nil {
+				// The #113 incident hid here for five days: every call
+				// errored, every caller continued, nothing measured it.
+				diagLinkExpansionErrors.Add(1)
+				continue
+			}
+			if neighbor == nil {
 				continue
 			}
 
@@ -1044,6 +1051,7 @@ func (s *SQLiteStore) expandSearchEdges(ctx context.Context, p SearchParams, res
 				continue
 			}
 
+			diagLinkExpansionAdded.Add(1)
 			expanded = append(expanded, SearchResult{
 				Memory:     *neighbor,
 				Similarity: float64(edge.Weight) * overlap, // score = edge weight × query relevance
