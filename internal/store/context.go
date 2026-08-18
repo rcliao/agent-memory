@@ -131,6 +131,10 @@ type ContextResult struct {
 	Memories            []ContextMemory `json:"memories"`
 	Skipped             int             `json:"skipped,omitempty"`
 	CompactionSuggested bool            `json:"compaction_suggested,omitempty"`
+	// Stages counts what each retrieval stage CONTRIBUTED to the packed
+	// output (liveness canary, see diagnostics.go). Additive; omitted when
+	// empty for wire compatibility.
+	Stages map[string]int `json:"stages,omitempty"`
 }
 
 // contextCandidate is a memory with its computed score for context ranking.
@@ -164,6 +168,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	}
 
 	result := &ContextResult{Budget: budget, Memories: []ContextMemory{}}
+	result.Stages = map[string]int{}
 	usedTokens := 0
 	seen := map[string]bool{} // track memory IDs to deduplicate
 	// Pinned memories seed expansion without joining the candidate pool — they
@@ -192,6 +197,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 				memTokens = (len(m.Content) / 4) + 20
 			}
 			if usedTokens+memTokens <= pinBudget {
+				result.Stages["packed_pinned"]++
 				result.Memories = append(result.Memories, ContextMemory{
 					NS:         m.NS,
 					Key:        m.Key,
@@ -261,6 +267,8 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	if len(results) == 0 && len(result.Memories) == 0 {
 		return &ContextResult{Budget: budget, Used: 0, Memories: []ContextMemory{}}, nil
 	}
+
+	result.Stages["search_results"] = len(results)
 
 	// Score each memory using kind-specific weights.
 	// Cognitive rationale:
@@ -367,7 +375,21 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 			// than carrying an unexercised code path.
 			s.expandEdgesPPR(ctx, scoreMap, seen, edgeCfg, now)
 		} else {
+			poolBefore, reservedBefore := len(scoreMap), 0
+			for _, c := range scoreMap {
+				if c.reserved {
+					reservedBefore++
+				}
+			}
 			s.expandEdges(ctx, scoreMap, seen, edgeCfg, now, pinnedSeeds)
+			reservedAfter := 0
+			for _, c := range scoreMap {
+				if c.reserved {
+					reservedAfter++
+				}
+			}
+			result.Stages["edge_added"] = len(scoreMap) - poolBefore
+			result.Stages["edge_marked_reserved"] = reservedAfter - reservedBefore
 		}
 	}
 
@@ -380,7 +402,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 	// reserved, riding the same hoist + floor exemption as refutations: the
 	// store never suppresses the inference or ranks by authority; it
 	// guarantees the reader sees both and applies the ladder itself.
-	s.reserveStatementsForInferences(ctx, p.NS, scoreMap)
+	result.Stages["authority_reserved"] = s.reserveStatementsForInferences(ctx, p.NS, scoreMap)
 
 	// Collect and sort candidates
 	var candidates []contextCandidate
@@ -586,6 +608,14 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		}
 
 		if usedTokens+memTokens <= budget {
+			switch {
+			case c.viaEdge:
+				result.Stages["packed_via_edge"]++
+			case c.reserved:
+				result.Stages["packed_reserved"]++
+			default:
+				result.Stages["packed_search"]++
+			}
 			result.Memories = append(result.Memories, ContextMemory{
 				NS:         c.memory.NS,
 				Key:        c.memory.Key,
@@ -637,6 +667,7 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 
 	// Pressure-based compaction signal: if total active memories in namespace
 	// exceed threshold, suggest compaction even if budget wasn't exhausted.
+	logStages(result.Stages)
 	if !result.CompactionSuggested && p.NS != "" {
 		count, err := s.countActiveMemories(ctx, p.NS)
 		if err == nil && count > 500 {

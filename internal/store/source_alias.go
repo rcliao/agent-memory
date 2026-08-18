@@ -180,7 +180,7 @@ func asciiFold(s string) string {
 // topical link — both rows answered the same retrieval, so the statement is
 // the person's own word on the matter at hand. The store adds visibility,
 // never judgment: the inference is untouched, unranked, unsuppressed.
-func (s *SQLiteStore) reserveStatementsForInferences(ctx context.Context, ns string, pool map[string]*contextCandidate) {
+func (s *SQLiteStore) reserveStatementsForInferences(ctx context.Context, ns string, pool map[string]*contextCandidate) int {
 	var persons []string
 	for _, c := range pool {
 		if c.memory.SourceKind == "observed" && c.memory.SourceUser != "" {
@@ -188,9 +188,10 @@ func (s *SQLiteStore) reserveStatementsForInferences(ctx context.Context, ns str
 		}
 	}
 	if len(persons) == 0 {
-		return
+		return 0
 	}
 	resolver := s.loadSourceResolver(ctx, ns)
+	marked := 0
 	for _, person := range persons {
 		var best *contextCandidate
 		for _, c := range pool {
@@ -206,6 +207,8 @@ func (s *SQLiteStore) reserveStatementsForInferences(ctx context.Context, ns str
 		}
 		if best != nil {
 			best.reserved = true
+			marked++
 		}
 	}
+	return marked
 }
