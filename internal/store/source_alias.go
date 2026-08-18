@@ -171,3 +171,41 @@ func asciiFold(s string) string {
 	}
 	return string(b)
 }
+
+// reserveStatementsForInferences implements the authority travel rule: for
+// every pool candidate that is a person-attributed inference
+// (source_kind=observed, source_user set), the highest-scoring stated
+// candidate from the same canonical person already in the pool is marked
+// reserved so packing holds room for it. Same-query membership is the
+// topical link — both rows answered the same retrieval, so the statement is
+// the person's own word on the matter at hand. The store adds visibility,
+// never judgment: the inference is untouched, unranked, unsuppressed.
+func (s *SQLiteStore) reserveStatementsForInferences(ctx context.Context, ns string, pool map[string]*contextCandidate) {
+	var persons []string
+	for _, c := range pool {
+		if c.memory.SourceKind == "observed" && c.memory.SourceUser != "" {
+			persons = append(persons, c.memory.SourceUser)
+		}
+	}
+	if len(persons) == 0 {
+		return
+	}
+	resolver := s.loadSourceResolver(ctx, ns)
+	for _, person := range persons {
+		var best *contextCandidate
+		for _, c := range pool {
+			if c.memory.SourceKind != "stated" || c.reserved {
+				continue
+			}
+			if !resolver.sameSource(c.memory.SourceUser, person) {
+				continue
+			}
+			if best == nil || c.score > best.score {
+				best = c
+			}
+		}
+		if best != nil {
+			best.reserved = true
+		}
+	}
+}

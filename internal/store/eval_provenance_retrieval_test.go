@@ -16,10 +16,11 @@ import (
 //	    beats my inference"; today it cannot see which is which.
 //	(b) INTERLOCUTOR BOOST — Context(ForUser) prefers what THIS person told
 //	    the agent when the budget is contested. Boost, never filter.
-//	(c) AUTHORITY — stated-beats-observed at conflict points only. NOT
-//	    implemented; its red baseline lives here as a documenting test the
-//	    same way TestLostUpdateWithoutCAS documented the lost update, to be
-//	    inverted when the adoption census shows the fields populated.
+//	(c) AUTHORITY — inference-never-without-statement, SHIPPED once the
+//	    adoption census showed the fields populated (2026-08-17). The store
+//	    never ranks by authority: when a person-attributed inference is in
+//	    the pool, the same person's statement rides the reserve hoist so
+//	    the reader sees both and applies the ladder itself.
 
 func provStore(t *testing.T) *SQLiteStore {
 	t.Helper()
@@ -217,12 +218,12 @@ func TestProvenanceAuthorityBaseline(t *testing.T) {
 	}
 	// Same-topic filler so the tight budget is genuinely contested.
 	for i, f := range []string{
-		"The cheese shop downtown restocks on Fridays.",
-		"Dairy-free oat milk worked fine in the pancake recipe.",
-		"The fridge's dairy drawer runs a degree warmer than the shelves.",
+		"Mami liked the aged gouda from the cheese shop downtown last month.",
+		"Mami's dairy drawer in the fridge runs a degree warmer than the shelves.",
+		"A cheese plate for guests usually needs three textures, mami's cookbook says.",
 	} {
 		if _, err := s.Put(ctx, PutParams{NS: "agent:home", Key: "note-" + string(rune('0'+i)),
-			Content: f, Kind: "semantic", Tier: "ltm", Importance: 0.4}); err != nil {
+			Content: f, Kind: "semantic", Tier: "ltm", Importance: 0.6}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -235,7 +236,7 @@ func TestProvenanceAuthorityBaseline(t *testing.T) {
 	// rule, the rehearsed inference packs and the statement does not. If
 	// this stops holding the corpus proves nothing — fail loudly.
 	res, err := s.Context(ctx, ContextParams{
-		NS: "agent:home", Query: "can I suggest a cheese plate for mami", Budget: 60})
+		NS: "agent:home", Query: "can I suggest a cheese plate for mami", Budget: 150})
 	if err != nil {
 		t.Fatal(err)
 	}
