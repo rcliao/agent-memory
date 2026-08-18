@@ -16,10 +16,11 @@ import (
 //	    beats my inference"; today it cannot see which is which.
 //	(b) INTERLOCUTOR BOOST — Context(ForUser) prefers what THIS person told
 //	    the agent when the budget is contested. Boost, never filter.
-//	(c) AUTHORITY — stated-beats-observed at conflict points only. NOT
-//	    implemented; its red baseline lives here as a documenting test the
-//	    same way TestLostUpdateWithoutCAS documented the lost update, to be
-//	    inverted when the adoption census shows the fields populated.
+//	(c) AUTHORITY — inference-never-without-statement, SHIPPED once the
+//	    adoption census showed the fields populated (2026-08-17). The store
+//	    never ranks by authority: when a person-attributed inference is in
+//	    the pool, the same person's statement rides the reserve hoist so
+//	    the reader sees both and applies the ladder itself.
 
 func provStore(t *testing.T) *SQLiteStore {
 	t.Helper()
@@ -192,30 +193,50 @@ func keysJoin(res *ContextResult) string { return strings.Join(keysOf(res), ",")
 // (not fails) when today's pipeline happens to violate it. When the adoption
 // census shows source fields populated in production and the authority rule
 // ships, the t.Log below flips to t.Errorf and this becomes the gate.
+// The adoption census showed the fields populated in production
+// (2026-08-17: 456 canonical person-rows in 3 days), so per the recorded
+// flip condition this is now THE GATE, not a baseline log. The corpus is
+// built so the rehearsed inference deterministically wins the packing slot
+// alone — asserting the statement travels is red without the mechanism.
 func TestProvenanceAuthorityBaseline(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	// The dairy shape, synthetic: a well-rehearsed inference vs the person's
-	// own later statement.
+	// own later statement. The inference is ABOUT mami (source_user=mami,
+	// kind=observed) — the authority ladder only compares same-person rows.
 	if _, err := s.Put(ctx, PutParams{NS: "agent:home", Key: "dairy-guess",
 		Content:    "Mami seems to react badly to dairy; suggest avoiding milk products.",
-		Kind:       "semantic", Tier: "ltm", Importance: 0.7,
-		SourceKind: "observed"}); err != nil {
+		Kind:       "semantic", Tier: "ltm", Importance: 0.9,
+		SourceUser: "mami", SourceKind: "observed"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Put(ctx, PutParams{NS: "agent:home", Key: "dairy-stated",
 		Content:    "Mami said she is not dairy-sensitive; the latte and Greek yogurt caused no reaction.",
-		Kind:       "semantic", Tier: "ltm", Importance: 0.5,
+		Kind:       "semantic", Tier: "ltm", Importance: 0.4,
 		SourceUser: "mami", SourceKind: "stated"}); err != nil {
 		t.Fatal(err)
+	}
+	// Same-topic filler so the tight budget is genuinely contested.
+	for i, f := range []string{
+		"Mami liked the aged gouda from the cheese shop downtown last month.",
+		"Mami's dairy drawer in the fridge runs a degree warmer than the shelves.",
+		"A cheese plate for guests usually needs three textures, mami's cookbook says.",
+	} {
+		if _, err := s.Put(ctx, PutParams{NS: "agent:home", Key: "note-" + string(rune('0'+i)),
+			Content: f, Kind: "semantic", Tier: "ltm", Importance: 0.6}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// Rehearse the inference the way production did: repeated access.
 	for i := 0; i < 6; i++ {
 		_, _ = s.Get(ctx, GetParams{NS: "agent:home", Key: "dairy-guess"})
 	}
 
+	// Precondition (the #116 lesson): at this budget, without the authority
+	// rule, the rehearsed inference packs and the statement does not. If
+	// this stops holding the corpus proves nothing — fail loudly.
 	res, err := s.Context(ctx, ContextParams{
-		NS: "agent:home", Query: "can I suggest a cheese plate for mami", Budget: 300})
+		NS: "agent:home", Query: "can I suggest a cheese plate for mami", Budget: 150})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,13 +251,13 @@ func TestProvenanceAuthorityBaseline(t *testing.T) {
 	}
 	switch {
 	case guess && !stated:
-		t.Log("BASELINE VIOLATION (expected today): the rehearsed inference reached context " +
-			"without the person's own statement — inference-without-statement, the provenance " +
-			"sibling of stale-without-fresh. This line becomes t.Errorf when the authority " +
-			"rule ships behind the adoption census.")
-	case guess && stated:
-		t.Log("baseline holds on this corpus: statement travelled with the inference")
+		t.Errorf("AUTHORITY VIOLATION: the rehearsed inference reached context without the " +
+			"person's own statement — inference-without-statement, the provenance sibling " +
+			"of stale-without-fresh. The statement must travel with the inference.")
+	case !guess:
+		t.Fatalf("corpus precondition broken: the inference no longer packs at this budget "+
+			"(keys %v) — retune before trusting this gate", keysOf(res))
 	default:
-		t.Log("inference not retrieved at this budget; case exercises nothing this run")
+		t.Log("authority holds: statement travelled with the inference")
 	}
 }

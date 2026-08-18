@@ -371,6 +371,17 @@ func (s *SQLiteStore) Context(ctx context.Context, p ContextParams) (*ContextRes
 		}
 	}
 
+	// Authority: inference-never-without-statement (the dairy rule,
+	// provenance-encoding-context-design.md mechanism (c), gated by
+	// TestProvenanceAuthorityBaseline). When a person-attributed inference
+	// (kind=observed) is in the pool, the same person's own statement on the
+	// same query — if retrieval surfaced one — must not be squeezed out of
+	// packing by the very inference it corrects. The statement is marked
+	// reserved, riding the same hoist + floor exemption as refutations: the
+	// store never suppresses the inference or ranks by authority; it
+	// guarantees the reader sees both and applies the ladder itself.
+	s.reserveStatementsForInferences(ctx, p.NS, scoreMap)
+
 	// Collect and sort candidates
 	var candidates []contextCandidate
 	for _, sc := range scoreMap {
